@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -12,7 +12,9 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o ./build/auth-service .
 
-FROM golang:1.21-alpine AS base
+FROM alpine:3.21 AS base
+
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 COPY --from=builder /app/build/auth-service /usr/local/bin/auth-service

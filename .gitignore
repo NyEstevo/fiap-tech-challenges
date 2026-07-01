@@ -5,9 +5,18 @@
 
 #fase-2
 /fase-2/analytics-service/.env
+/fase-2/analytics-service/k8s/secret.yaml
 /fase-2/auth-service/.env
 /fase-2/targeting-service/.env
 /fase-2/flag-service/.env
 /fase-2/evaluation-service/.env
+
+/fase-2/analytics-service/init-scripts/*.sql
+/fase-2/auth-service/init.sql
+/fase-2/targeting-service/init.sql
+/fase-2/flag-service/init.sql
+/fase-2/evaluation-service/init.sql
+
+/fase-2/analytics-service/localstack
 
 #fase-3

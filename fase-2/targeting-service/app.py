@@ -9,13 +9,14 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from functools import wraps
 import logging
+from db.migrate import run_migrations
 
 # Configura o logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # Carrega .env para desenvolvimento local
-load_dotenv() 
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -25,6 +26,13 @@ AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL")
 
 if not DATABASE_URL or not AUTH_SERVICE_URL:
     log.critical("Erro: DATABASE_URL e AUTH_SERVICE_URL devem ser definidos.")
+    sys.exit(1)
+
+# --- Migrations ---
+try:
+    run_migrations(DATABASE_URL)
+except Exception as e:
+    log.critical(f"Erro fatal ao aplicar migrations: {e}")
     sys.exit(1)
 
 # --- Pool de Conexão com o Banco ---

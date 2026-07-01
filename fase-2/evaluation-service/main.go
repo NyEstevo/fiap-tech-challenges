@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net/http"
 	"os"
@@ -67,6 +68,9 @@ func main() {
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
 		log.Fatalf("Não foi possível parsear a URL do Redis: %v", err)
+	}
+	if opt.TLSConfig != nil && os.Getenv("REDIS_TLS_INSECURE") == "true" {
+		opt.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	rdb := redis.NewClient(opt)
 	if _, err := rdb.Ping(ctx).Result(); err != nil {

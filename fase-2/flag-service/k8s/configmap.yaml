@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flags-service-config
+  namespace: tech-challenge-fase-2
+data:
+  AUTH_SERVICE_URL: "http://auth-service-svc"

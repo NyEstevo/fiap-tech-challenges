@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"auth-service/db"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/joho/godotenv"
 )
@@ -37,14 +38,19 @@ func main() {
 	}
 
 	// --- Conexão com o Banco ---
-	db, err := connectDB(databaseURL)
+	sqlDB, err := connectDB(databaseURL)
 	if err != nil {
 		log.Fatalf("Não foi possível conectar ao banco de dados: %v", err)
 	}
-	defer db.Close()
+	defer sqlDB.Close()
+
+	if err := db.RunMigrations(sqlDB); err != nil {
+		log.Fatalf("Erro ao aplicar migrations: %v", err)
+	}
+	log.Println("Migrations aplicadas com sucesso!")
 
 	app := &App{
-		DB:         db,
+		DB:         sqlDB,
 		MasterKey:  masterKey,
 	}
 
