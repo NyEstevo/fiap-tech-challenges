@@ -7,9 +7,13 @@
 /fase-2/analytics-service/.env
 /fase-2/analytics-service/k8s/secret.yaml
 /fase-2/auth-service/.env
+/fase-2/auth-service/k8s/secret.yaml
 /fase-2/targeting-service/.env
+/fase-2/targeting-service/k8s/secret.yaml
 /fase-2/flag-service/.env
+/fase-2/flag-service/k8s/secret.yaml
 /fase-2/evaluation-service/.env
+/fase-2/evaluation-service/k8s/secret.yaml
 
 /fase-2/analytics-service/init-scripts/*.sql
 /fase-2/auth-service/init.sql
