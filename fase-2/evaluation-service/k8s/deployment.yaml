@@ -1,144 +1,56 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: evaluation-service-deployment
-  namespace: tech-challenge-fase-2
+  name: evaluation-deployment
+  namespace: toggle
   labels:
-    app: evaluation-service
+    app: evaluation
 spec:
-  replicas: 2
-  revisionHistoryLimit: 3
-  selector:
-    matchLabels:
-      app: evaluation-service
+  replicas: 3
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: evaluation
   template:
     metadata:
       labels:
-        app: evaluation-service
+        app: evaluation
     spec:
-      imagePullSecrets:
-        - name: ecr-secret
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    app: evaluation-service
-                topologyKey: kubernetes.io/hostname
       containers:
-        - name: evaluation-service
-          image: 506394430088.dkr.ecr.us-east-1.amazonaws.com/fiap-tech-challenge/fase-2:evaluation-service-v1.1
-          ports:
-            - name: http
-              containerPort: 8004
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop:
-                - ALL
-          env:
-            - name: EVALUATION_INTERVAL
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: EVALUATION_INTERVAL
-            - name: PORT
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: PORT
-            - name: REDIS_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: REDIS_URL
-            - name: FLAG_SERVICE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: FLAG_SERVICE_URL
-            - name: TARGETING_SERVICE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: TARGETING_SERVICE_URL
-            - name: AUTH_SERVICE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: AUTH_SERVICE_URL
-            - name: ANALYTICS_SERVICE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: ANALYTICS_SERVICE_URL
-            - name: AWS_SQS_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: AWS_SQS_URL
-            - name: AWS_REGION
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: AWS_REGION
-            - name: SERVICE_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: evaluation-service-secrets
-                  key: SERVICE_API_KEY
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: evaluation-service-secrets
-                  key: AWS_ACCESS_KEY_ID
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: evaluation-service-secrets
-                  key: AWS_SECRET_ACCESS_KEY
-            - name: AWS_SESSION_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: evaluation-service-secrets
-                  key: AWS_SESSION_TOKEN
-            - name: REDIS_TLS_INSECURE
-              valueFrom:
-                configMapKeyRef:
-                  name: evaluation-service-config
-                  key: REDIS_TLS_INSECURE
-                  optional: true
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "256Mi"
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            failureThreshold: 3
-            timeoutSeconds: 2
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 20
-            periodSeconds: 20
-            failureThreshold: 3
-            timeoutSeconds: 2
+      - name: evaluation-container
+        image: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/evaluation-image:1.0
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "20m"
+          limits:
+            memory: "128Mi"
+            cpu: "40m"
+        ports:
+        - containerPort: 8004
+        envFrom:
+        - configMapRef:
+            name: evaluation-configmap
+        - secretRef:
+            name: evaluation-secret
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 20
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1

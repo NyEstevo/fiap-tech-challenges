@@ -1,7 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: flags-service-config
-  namespace: tech-challenge-fase-2
+  name: flag-configmap
+  namespace: toggle
 data:
-  AUTH_SERVICE_URL: "http://auth-service-svc"
+  PORT: "8002"
+  AUTH_SERVICE_URL: "http://auth-service:8001"

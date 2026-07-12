@@ -1,87 +1,54 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: analytics-service-deployment
-  namespace: tech-challenge-fase-2
+  name: analytics-deployment
+  namespace: toggle
   labels:
-    app: analytics-service
+    app: analytics
 spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: analytics-service
+  replicas: 3
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: analytics
   template:
     metadata:
       labels:
-        app: analytics-service
+        app: analytics
     spec:
-      imagePullSecrets:
-        - name: ecr-secret
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
       containers:
-        - name: analytics-service
-          image: 506394430088.dkr.ecr.us-east-1.amazonaws.com/fiap-tech-challenge/fase-2:analytics-service-v1.0
-          ports:
-            - containerPort: 8005
-          env:
-            - name: AWS_REGION
-              valueFrom:
-                configMapKeyRef:
-                  name: analytics-service-config
-                  key: AWS_REGION
-            - name: AWS_SQS_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: analytics-service-config
-                  key: AWS_SQS_URL
-            - name: AWS_DYNAMODB_TABLE
-              valueFrom:
-                configMapKeyRef:
-                  name: analytics-service-config
-                  key: AWS_DYNAMODB_TABLE
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: analytics-service-secrets
-                  key: AWS_ACCESS_KEY_ID
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: analytics-service-secrets
-                  key: AWS_SECRET_ACCESS_KEY
-            - name: AWS_SESSION_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: analytics-service-secrets
-                  key: AWS_SESSION_TOKEN
-            - name: AWS_DYNAMODB_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: analytics-service-config
-                  key: AWS_DYNAMODB_URL
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "256Mi"
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8005
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8005
-            initialDelaySeconds: 20
-            periodSeconds: 20
+      - name: analytics-container
+        image: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/analytics-image:1.0
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "20m"
+          limits:
+            memory: "128Mi"
+            cpu: "40m"
+        ports:
+        - containerPort: 8005
+        envFrom:
+        - configMapRef:
+            name: analytics-configmap
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8005
+          initialDelaySeconds: 20
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8005
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1

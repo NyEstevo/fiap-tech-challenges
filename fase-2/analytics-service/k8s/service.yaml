@@ -1,15 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: analytics-service-svc
-  namespace: tech-challenge-fase-2
-  labels:
-    app: analytics-service
+  name: analytics-service
+  namespace: toggle
 spec:
   selector:
-    app: analytics-service
+    app: analytics
   ports:
     - protocol: TCP
-      port: 80
+      port: 8005
       targetPort: 8005
   type: ClusterIP

@@ -1,16 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: flags-service-svc
-  namespace: tech-challenge-fase-2
-  labels:
-    app: flags-service
+  name: flag-service
+  namespace: toggle
 spec:
   selector:
-    app: flags-service
+    app: flag
   ports:
     - protocol: TCP
-      port: 80
+      port: 8002
       targetPort: 8002
   type: ClusterIP
-  
