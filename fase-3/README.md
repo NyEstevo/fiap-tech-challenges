@@ -166,11 +166,79 @@ Cada microsserviço é uma `Application` independente, sincronizada do respectiv
 
 ## Dificuldades Encontradas
 
-> A confirmar com o grupo — sugestões de tópicos a documentar, com base no padrão das fases anteriores:
-- Restrições de IAM do AWS Academy ao associar a `LabRole` via Terraform (ex.: permissões insuficientes para determinados recursos).
-- Falsos positivos ou ruído inicial nos scans de SAST/SCA, exigindo ajuste de thresholds/allowlists.
-- Ordenação de dependências no Terraform entre módulos (ex.: EKS depender da VPC, RDS depender das Subnets privadas).
-- Sincronização inicial do ArgoCD (ex.: drift entre o estado do cluster criado manualmente na Fase 2 e o novo estado gerenciado via GitOps).
+- **Conta/região herdadas erradas da Fase 2:** os manifests e o Terraform vinham
+  com `us-east-2`/`047719652987` (fase anterior); o Academy usa outra conta
+  (`361075236043`) e não libera `us-east-2` no Learner Lab. Exigiu ajuste em
+  bootstrap, envs, módulos, gitops e workflows.
+- **Access Entry errado impedindo os nodes de entrar no cluster:** a `LabRole`
+  (role dos nodes) estava com Access Entry `STANDARD` em vez de `EC2_LINUX`.
+  Sem o tipo certo, os nodes não entram em `system:nodes`, o EKS não assina os
+  CSRs `kubelet-serving` e `metrics-server`/`kubectl top|logs|exec` quebram com
+  `tls: internal error` — causa raiz nada óbvia de se rastrear.
+- **Versões de EKS/RDS fora de suporte na região:** `cluster_version 1.30` saiu
+  de suporte (sem AMI de node group disponível) e o `engine_version 16.4` do
+  RDS não existe em `us-east-1`; precisou bump para EKS 1.31 e Postgres 16.9.
+- **`kubernetes_manifest` exige API viva já no `plan`:** a Application raiz do
+  ArgoCD usava esse recurso e quebrava o primeiro `apply` (cluster ainda não
+  existe). Resolvido colocando-a atrás da flag `bootstrap_gitops_root_app`,
+  ligada só no 3º apply (depois que EKS + ArgoCD já estão no ar).
+- **Ausência de IRSA no AWS Academy:** sem permissão para criar IAM Roles, não
+  há como dar credenciais AWS "nativas" a pods. Isso bloqueou o
+  `ClusterSecretStore` do ESO, o `TriggerAuthentication` do KEDA e o worker SQS
+  do `analytics`/`evaluation` (erro `NoCredentialProviders`/`no EC2 IMDS role
+  found`). Resolvido com `Secret`s de credenciais estáticas de sessão,
+  recriados a cada `terraform apply` (o token de sessão do Academy expira em
+  ~4h).
+- **Deadlock de sincronização no ArgoCD:** o Job de `migration` (hook
+  `PreSync`) referenciava um Secret que só era materializado pelo
+  `ExternalSecret` na fase `Sync` normal — ou seja, depois do `PreSync`. O Job
+  travava em `CreateContainerConfigError` e bloqueava a fase `PreSync` inteira,
+  o que impedia o próprio `ExternalSecret` de ser aplicado (deadlock completo
+  em cluster novo). Resolvido tornando o `ExternalSecret` também um hook
+  `PreSync`, numa `sync-wave` anterior à do Job.
+- **Falso "OutOfSync" permanente no ArgoCD:** o webhook do External Secrets
+  Operator injeta campos default de schema do CRD (`conversionStrategy`,
+  `decodingStrategy`, `deletionPolicy`) que não existem no Git. O diff
+  client-side do ArgoCD via isso como drift eterno e reaplicava um no-op sem
+  parar. Corrigido ativando `ServerSideDiff` no `application-controller`.
+- **Capacidade de pods insuficiente nos nós de lab:** 2× `t3.medium` suportam
+  ~34 pods (VPC CNI sem prefix delegation); os 5 serviços com 3 réplicas +
+  HPAs mínimos não cabiam, gerando `FailedScheduling` ("Too many pods").
+  Precisou reduzir réplicas repetidas vezes (idas e vindas entre 1, 2 e 3) e
+  remover o HPA do `analytics` que conflitava com o autoscaler do KEDA.
+- **Cold start dos pods:** os probes de readiness falhavam com "context
+  deadline exceeded" no `/health` logo após o cluster subir. Não era bug de
+  aplicação — o limite de CPU (40m) era baixo demais para o boot do gunicorn +
+  inicialização do pool de conexões Postgres + primeira chamada TLS a um RDS
+  `t3.micro` frio, tudo competindo por CPU dentro do timeout do probe.
+- **CVE crítica herdada da imagem base do Go:** o Dockerfile de `auth` e
+  `evaluation` usava `golang:1.21-alpine` também no estágio final, então o
+  runtime carregava o toolchain Go inteiro com a stdlib 1.21 vulnerável
+  (CVE-2025-68121, `crypto/tls`, CRITICAL). Corrigido com multi-stage real:
+  builder `golang:1.25-alpine` + runtime `alpine:3.21` mínimo, só com o
+  binário.
+- **`gunicorn` dependendo de pacote ausente:** a versão 20.1.0 fazia `import
+  pkg_resources`, que não vem instalado por padrão em `python:3.12-alpine`
+  (sem `setuptools`) — os pods de `flag`/`targeting` entravam em
+  `CrashLoopBackOff`. Resolvido subindo para `gunicorn` 23 (usa
+  `importlib.metadata`, sem essa dependência).
+- **Instabilidade de Actions de terceiros no CI:** o `aquasecurity/trivy-action`
+  mudou o formato de tag (sem prefixo `v`) e depois teve a tag referenciada
+  pelo `setup-trivy` removida do repositório upstream; o
+  `golangci-lint-action@v6` não suporta `golangci-lint` v2. Problemas de
+  infraestrutura de terceiros fora do controle do time, exigindo
+  investigação e re-pin a cada quebra.
+- **Bump de imagem sem regenerar os artefatos de contrato:** o job
+  `gitops-update` só commitava o `kustomization.yaml` com a nova tag; os
+  golden files em `fase-3/gitops/.render/` ficavam desatualizados e o gate
+  `make render-diff` ficava vermelho na branch `lab` depois de cada deploy,
+  até alguém rodar `render-baseline` manualmente. Resolvido incluindo essa
+  regeneração no mesmo commit do bump.
+
+Vários desses problemas só apareceram depois que o ambiente `lab` foi
+efetivamente provisionado e operado na AWS (não em `terraform validate`/CI),
+inclusive após pelo menos um ciclo completo de destroy e reconstrução da
+infraestrutura para controlar custo/tempo de sessão do AWS Academy.
 
 ## Estimativa de Custos
 
