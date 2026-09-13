@@ -72,7 +72,7 @@ func main() {
 	if _, err := rdb.Ping(ctx).Result(); err != nil {
 		log.Fatalf("Não foi possível conectar ao Redis: %v", err)
 	}
-	log.Println("Conectado ao Redis com sucesso!")
+	log.Println("Conectado ao Redis com sucesso! disparo do argo")
 
 	// Cliente SQS (AWS SDK)
 	var sqsSvc *sqs.SQS

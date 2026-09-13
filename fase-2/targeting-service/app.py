@@ -44,7 +44,7 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization")
         if not auth_header:
-            return jsonify({"error": "Authorization header obrigatório"}), 401
+            return jsonify({"error": "Authorization header obrigatório disparo do argo"}), 401
 
         try:
             validate_url = f"{AUTH_SERVICE_URL}/validate"

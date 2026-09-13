@@ -31,7 +31,7 @@ if not DATABASE_URL or not AUTH_SERVICE_URL:
 # Inicializa o pool de conexões (Mín: 1, Máx: 5 conexões)
 try:
     pool = SimpleConnectionPool(1, 5, dsn=DATABASE_URL)
-    log.info("Pool de conexões com o PostgreSQL inicializado.")
+    log.info("Pool de conexões com o PostgreSQL inicializado. disparo do argo")
 except psycopg2.OperationalError as e:
     log.critical(f"Erro fatal ao conectar ao PostgreSQL: {e}")
     sys.exit(1)

@@ -39,7 +39,7 @@ func main() {
 	// --- Conexão com o Banco ---
 	db, err := connectDB(databaseURL)
 	if err != nil {
-		log.Fatalf("Não foi possível conectar ao banco de dados: %v", err)
+		log.Fatalf("Não foi possível conectar ao banco de dados: %v disparo do argo", err)
 	}
 	defer db.Close()
 

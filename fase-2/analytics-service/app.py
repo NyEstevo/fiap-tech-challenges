@@ -25,7 +25,7 @@ DYNAMODB_TABLE_NAME = os.getenv("AWS_DYNAMODB_TABLE")
 AWS_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")
 
 if not all([AWS_REGION, SQS_QUEUE_URL, DYNAMODB_TABLE_NAME]):
-    log.critical("Erro: AWS_REGION, AWS_SQS_URL, e AWS_DYNAMODB_TABLE devem ser definidos.")
+    log.critical("Erro: AWS_REGION, AWS_SQS_URL, e AWS_DYNAMODB_TABLE devem ser definidos. disparo do argo")
     sys.exit(1)
 
 # --- Clientes Boto3 ---
