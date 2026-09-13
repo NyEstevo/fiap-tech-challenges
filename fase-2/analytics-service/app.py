@@ -34,7 +34,7 @@ try:
     session = boto3.Session(region_name=AWS_REGION)
     sqs_client = session.client("sqs", endpoint_url=AWS_ENDPOINT_URL)
     dynamodb_client = session.client("dynamodb", endpoint_url=AWS_ENDPOINT_URL)
-    log.info(f"Clientes Boto3 inicializados na região {AWS_REGION}")
+    log.info(f"Clientes Boto3 inicializados na região {AWS_REGION} com sucesso na pipeline.")
 except NoCredentialsError:
     log.critical("Credenciais da AWS não encontradas. Verifique seu ambiente.")
     sys.exit(1)
