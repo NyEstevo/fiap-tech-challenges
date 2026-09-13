@@ -10,5 +10,36 @@ kind: Kustomization
 # 'kustomize edit set image' -- mesma mecanica do overlay lab de hoje.
 resources:
 - ../../base
+- serviceaccount.yaml
 
 namespace: toggle
+
+patches:
+  - target:
+      kind: ExternalSecret
+      name: analytics-secret
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: tc-analytics-app-prod
+      - op: replace
+        path: /spec/data/1/remoteRef/key
+        value: tc-analytics-app-prod
+      - op: replace
+        path: /spec/data/2/remoteRef/key
+        value: tc-analytics-app-prod
+  - target:
+      kind: Deployment
+      name: analytics-deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/serviceAccountName
+        value: analytics-service-account
+  - target:
+      group: keda.sh
+      kind: ScaledObject
+      name: analytics-service-scaler
+      version: v1alpha1
+    patch: |
+      - op: remove
+        path: /spec/triggers/0/metadata/identityOwner

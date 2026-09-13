@@ -11,8 +11,7 @@ kind: Kustomization
 # fila/regiao do lab).
 # analytics-service usa SQS + DynamoDB (schemaless) -> sem Job de migration.
 resources:
-- ../../../analytics/k8s/base
-- externalsecret.yaml
+- ../../../analytics/k8s/overlays/prod
 
 namespace: toggle
 
@@ -49,11 +48,6 @@ patches:
       value:
         secretRef:
           name: analytics-secret
-    - op: add
-      path: /spec/template/spec/containers/0/envFrom/-
-      value:
-        secretRef:
-          name: aws-session-creds
   target:
     kind: Deployment
     name: analytics-deployment
@@ -65,34 +59,12 @@ patches:
     kind: ScaledObject
     name: analytics-service-scaler
 - patch: |
-    - op: remove
-      path: /spec/podIdentity
-    - op: add
-      path: /spec/secretTargetRef
-      value:
-        - parameter: awsAccessKeyID
-          name: aws-session-creds
-          key: AWS_ACCESS_KEY_ID
-        - parameter: awsSecretAccessKey
-          name: aws-session-creds
-          key: AWS_SECRET_ACCESS_KEY
-        - parameter: awsSessionToken
-          name: aws-session-creds
-          key: AWS_SESSION_TOKEN
-  target:
-    group: keda.sh
-    kind: TriggerAuthentication
-    name: keda-aws-credentials
-    version: v1alpha1
-- patch: |
     - op: replace
       path: /spec/triggers/0/metadata/queueURL
-      value: https://sqs.us-east-1.amazonaws.com/361075236043/tc-sqs
+      value: https://sqs.us-east-1.amazonaws.com/047719652987/tc-sqs-prod
     - op: replace
       path: /spec/triggers/0/metadata/awsRegion
       value: us-east-1
-    - op: remove
-      path: /spec/triggers/0/metadata/identityOwner
   target:
     group: keda.sh
     kind: ScaledObject
@@ -103,5 +75,5 @@ patches:
 # newTag (commit SHA) via 'kustomize edit set image'.
 images:
 - name: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/analytics-image
-  newName: 361075236043.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image
-  newTag: 0.0.0-lab.20-c376a76
+  newName: 047719652987.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image
+  newTag: 0.0.0-lab.35-9ece630

@@ -9,8 +9,7 @@ kind: Kustomization
 # + ClusterSecretStore em manifests/platform).
 # evaluation-service nao tem banco relacional (so Redis) -> sem Job de migration.
 resources:
-- ../../../evaluation/k8s/base
-- externalsecret.yaml
+- ../../../evaluation/k8s/overlays/prod
 
 namespace: toggle
 
@@ -38,15 +37,6 @@ patches:
     kind: ConfigMap
     name: evaluation-configmap
 - patch: |
-    - op: add
-      path: /spec/template/spec/containers/0/envFrom/-
-      value:
-        secretRef:
-          name: aws-session-creds
-  target:
-    kind: Deployment
-    name: evaluation-deployment
-- patch: |
     - op: replace
       path: /spec/minReplicas
       value: 1
@@ -61,5 +51,5 @@ patches:
 # newTag (commit SHA) via 'kustomize edit set image'.
 images:
 - name: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/evaluation-image
-  newName: 361075236043.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/evaluation-image
-  newTag: 0.0.0-lab.25-1326719
+  newName: 047719652987.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/evaluation-image
+  newTag: 0.0.0-lab.35-9ece630

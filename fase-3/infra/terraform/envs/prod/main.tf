@@ -22,7 +22,7 @@ locals {
     Phase       = "fase-3"
     Environment = local.env
     ManagedBy   = "terraform"
-    Repo        = "NyEstevo/fiap-tech-challenges"
+    Repo        = "Jffreitas-poli/fiap-tech-challenges"
     Account     = var.account_id
   }
 
@@ -78,6 +78,7 @@ module "eks" {
   node_desired         = 3
   node_max             = 6
   admin_principal_arns = var.admin_principal_arns
+  cluster_addons       = ["coredns", "kube-proxy", "vpc-cni", "eks-pod-identity-agent"]
 }
 
 # Provider OIDC do cluster -- base do IRSA. Bloco identico ao de envs/lab; em
@@ -150,9 +151,7 @@ module "service" {
 
   dynamodb_point_in_time_recovery = var.dynamodb_point_in_time_recovery
 
-  create_iam_role   = var.create_iam_role
-  oidc_provider_arn = one(aws_iam_openid_connect_provider.eks[*].arn)
-  oidc_issuer_url   = module.eks.cluster_oidc_issuer_url
+  create_iam_role = var.create_iam_role
 }
 
 ########################################################################
@@ -307,4 +306,13 @@ resource "null_resource" "root_app" {
   }
 
   depends_on = [module.addons]
+}
+
+resource "aws_eks_pod_identity_association" "app_association" {
+  cluster_name    = var.cluster_name
+  namespace       = "keda"
+  service_account = "keda-operator"
+  role_arn        = module.service[local.dynamodb_owner].keda_irsa_role_arn
+
+  depends_on = [module.addons, module.eks]
 }
