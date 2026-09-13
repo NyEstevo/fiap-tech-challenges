@@ -18,7 +18,7 @@ locals {
 
   common_tags = {
     Project     = "ToggleMaster"
-    Phase       = "fase-3"
+    Phase       = "fase-3-lab"
     Environment = local.env
     ManagedBy   = "terraform"
     Repo        = "NyEstevo/fiap-tech-challenges"
