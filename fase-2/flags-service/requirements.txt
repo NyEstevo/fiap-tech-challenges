@@ -5,3 +5,4 @@ python-dotenv==0.21.0
 requests==2.28.1
 alembic==1.13.2
 SQLAlchemy==2.0.32
+PyYAML==5.3.1
