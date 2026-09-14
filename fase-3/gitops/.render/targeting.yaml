@@ -89,9 +89,8 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   annotations:
-    argocd.argoproj.io/sync-options: Replace=true,Force=true
     argocd.argoproj.io/sync-wave: "-2"
-  name: targeting-migrate
+  name: targeting-migrate-unset
   namespace: toggle
 spec:
   activeDeadlineSeconds: 600
@@ -137,7 +136,6 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
-  ttlSecondsAfterFinished: 300
 ---
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret

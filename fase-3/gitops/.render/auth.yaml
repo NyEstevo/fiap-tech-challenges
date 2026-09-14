@@ -88,9 +88,8 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   annotations:
-    argocd.argoproj.io/sync-options: Replace=true,Force=true
     argocd.argoproj.io/sync-wave: "-2"
-  name: auth-migrate
+  name: auth-migrate-unset
   namespace: toggle
 spec:
   activeDeadlineSeconds: 600
@@ -135,7 +134,6 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
-  ttlSecondsAfterFinished: 300
 ---
 apiVersion: batch/v1
 kind: Job

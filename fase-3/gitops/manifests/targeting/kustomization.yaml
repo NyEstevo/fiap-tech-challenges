@@ -9,7 +9,7 @@ kind: Kustomization
 resources:
 - ../../../targeting/k8s/base
 - externalsecret.yaml
-- migrate-job.yaml
+- migrate
 
 namespace: toggle
 

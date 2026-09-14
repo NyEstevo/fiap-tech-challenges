@@ -11,7 +11,7 @@ kind: Kustomization
 resources:
 - ../../../auth/k8s/base
 - externalsecret.yaml
-- migrate-job.yaml
+- migrate
 - seed-job.yaml
 
 namespace: toggle
