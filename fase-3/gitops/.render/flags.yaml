@@ -49,7 +49,7 @@ spec:
                 name: flags-configmap
             - secretRef:
                 name: flags-secret
-          image: 301035467324.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/flags-image:0.0.0-lab.2-1326719
+          image: 301035467324.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/flags-image:0.0.0-lab.7-f6b0057
           livenessProbe:
             failureThreshold: 3
             httpGet:
@@ -110,7 +110,7 @@ spec:
           envFrom:
             - secretRef:
                 name: flags-secret
-          image: 301035467324.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/flags-image:0.0.0-lab.2-1326719
+          image: 301035467324.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/flags-image:0.0.0-lab.7-f6b0057
           name: migrate
           resources:
             limits:
