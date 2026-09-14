@@ -287,6 +287,14 @@ jobs:
             MIG="${ECR_REGISTRY}/${ECR_NS}/${SVC}-migrate-image"
             kustomize edit set image "${MIG}=${MIG}:${TAG}"
           fi
+          # Servicos com Job de migration isolado numa kustomization propria
+          # (pasta migrate/) ganham nome unico por deploy -- evita editar um
+          # Job existente (spec.template e imutavel). Guiado pela presenca da
+          # pasta, nao pelo nome do servico: nenhum servico fica hardcoded
+          # aqui, quem decide e a estrutura de arquivos de cada overlay.
+          if [ -d migrate ]; then
+            ( cd migrate && kustomize edit set namesuffix -- "-${GITHUB_SHA::7}" )
+          fi
 
       - name: regenera .render (golden)
         # O bump muda o kustomization.yaml; sem regenerar fase-3/gitops/.render/

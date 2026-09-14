@@ -5,17 +5,19 @@ metadata:
   namespace: toggle
   annotations:
     # resource normal (nao hook): waves ordenam ExternalSecret(-3) -> Job(-2)
-    # -> Deployment(0). 'spec.template' do Job e imutavel: 'Replace=true'
-    # sozinho roda 'kubectl replace' e falha nesse campo, deixando o Job
-    # antigo preso na imagem anterior (ImagePullBackOff quando a tag some).
-    # 'Force=true' -> 'kubectl replace --force' (delete + create), entao o
-    # Job e recriado com a imagem nova a cada bump de tag.
+    # -> Deployment(0). O nome deste Job ganha sufixo do SHA da imagem (ver
+    # kustomization.yaml deste diretorio e o step "bump da imagem" do CI) --
+    # cada deploy cria um objeto novo em vez de tentar editar um Job existente.
+    # 'spec.template' do Job e imutavel, entao SEM nome unico seria obrigatorio
+    # 'kubectl replace --force' (delete + create) a cada bump de tag; isso
+    # colidia com o selfHeal do ArgoCD (o Job some por ttl/replace, o ArgoCD
+    # acha que e drift e recria, num loop). Nome unico evita o replace: e
+    # sempre um create novo, e o Job antigo e limpo pelo prune (nome antigo
+    # nao existe mais no git) em vez de por ttlSecondsAfterFinished.
     argocd.argoproj.io/sync-wave: "-2"
-    argocd.argoproj.io/sync-options: Replace=true,Force=true
 spec:
   backoffLimit: 3
   activeDeadlineSeconds: 600
-  ttlSecondsAfterFinished: 300
   template:
     metadata:
       labels:
