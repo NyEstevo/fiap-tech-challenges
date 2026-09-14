@@ -104,4 +104,4 @@ patches:
 images:
 - name: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/analytics-image
   newName: 301035467324.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image
-  newTag: 0.0.0-lab.30-68a2cbf
+  newTag: 0.0.0-lab.34-7ddbd47
