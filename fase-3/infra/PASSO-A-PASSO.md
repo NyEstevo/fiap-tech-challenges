@@ -49,7 +49,7 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 ```bash
 aws sts get-caller-identity
-# Account deve ser 361075236043
+# Account deve ser301035467324
 ```
 
 ---
