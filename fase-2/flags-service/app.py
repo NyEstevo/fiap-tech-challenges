@@ -82,7 +82,7 @@ def health():
     return jsonify({"status": "ok"})
 
 
-@app.route("/flags", methods=["POST"])
+@app.route("/", methods=["POST"])
 @require_auth
 def create_flag():
     """Cria uma nova definição de feature flag"""
@@ -125,7 +125,7 @@ def create_flag():
             pool.putconn(conn)
 
 
-@app.route("/flags", methods=["GET"])
+@app.route("/", methods=["GET"])
 @require_auth
 def get_flags():
     """Lista todas as feature flags"""
@@ -147,7 +147,7 @@ def get_flags():
             pool.putconn(conn)
 
 
-@app.route("/flags/<string:name>", methods=["GET"])
+@app.route("/<string:name>", methods=["GET"])
 @require_auth
 def get_flag(name):
     """Busca uma feature flag específica pelo nome"""
@@ -171,7 +171,7 @@ def get_flag(name):
             pool.putconn(conn)
 
 
-@app.route("/flags/<string:name>", methods=["PUT"])
+@app.route("/<string:name>", methods=["PUT"])
 @require_auth
 def update_flag(name):
     """Atualiza uma feature flag (descrição ou status 'is_enabled')"""
@@ -225,7 +225,7 @@ def update_flag(name):
             pool.putconn(conn)
 
 
-@app.route("/flags/<string:name>", methods=["DELETE"])
+@app.route("/<string:name>", methods=["DELETE"])
 @require_auth
 def delete_flag(name):
     """Deleta uma feature flag"""

@@ -25,5 +25,5 @@ def test_health_ok():
 
 
 def test_flags_sem_auth_header_retorna_401():
-    resp = client.get("/flags")
+    resp = client.get("/")
     assert resp.status_code == 401
