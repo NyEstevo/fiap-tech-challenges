@@ -191,8 +191,6 @@ independente, gerada a partir do respectivo `fase-3/gitops/manifests/<svc>`.
 
 ## Dificuldades Encontradas
 
-## 5. Dificuldades encontradas
-
 - **Conta/região herdadas erradas da Fase 2:** os manifests e o Terraform
   vinham com `us-east-2`/`047719652987` (fase anterior); o Academy usa outra
   conta (`361075236043`) e não libera `us-east-2` no Learner Lab.
