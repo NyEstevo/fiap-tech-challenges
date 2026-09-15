@@ -103,7 +103,7 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 
 // fetchFlag (função helper)
 func (a *App) fetchFlag(flagName string) (*Flag, error) {
-	url := fmt.Sprintf("%s/flags/%s", a.FlagServiceURL, flagName)
+	url := fmt.Sprintf("%s/%s", a.FlagServiceURL, flagName)
 
 	apiKey := os.Getenv("SERVICE_API_KEY")
 	req, _ := http.NewRequest("GET", url, nil)

@@ -1,57 +1,107 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Reaproveita os manifests da Fase 2 sem duplicar.
-# analytics-service nao tem segredo, mas AWS_SQS_URL / AWS_DYNAMODB_TABLE /
-# AWS_REGION do configmap da fase-2 apontam para a conta/regiao antiga
-# (us-east-2). Esses valores vem do Secrets Manager via analytics-secret
-# (externalsecret.yaml), adicionado ao envFrom pelo patch abaixo.
+# Overlay lab. A base real vive em fase-3/analytics/k8s/base (consolidada da
+# fase-2, Emenda 001), incluindo kedaauthentication.yaml e scaledobject.yaml;
+# o hpa.yaml (min 3) fica de fora la mesmo -- conflita com o ScaledObject do
+# KEDA (min 0), que passa a ser o unico autoscaler.
+# Aqui ficam so os add-ons do lab: o ESO (analytics-secret, config derivada da
+# infra que substitui AWS_SQS_URL / AWS_DYNAMODB_TABLE / AWS_REGION da conta
+# antiga) e os patches (envFrom, minReplicaCount, credenciais de sessao do KEDA,
+# fila/regiao do lab).
 # analytics-service usa SQS + DynamoDB (schemaless) -> sem Job de migration.
 resources:
-  - ../../../../fase-2/analytics-service/k8s/configmap.yaml
-  - ../../../../fase-2/analytics-service/k8s/deployment.yaml
-  - ../../../../fase-2/analytics-service/k8s/service.yaml
-  - ../../../../fase-2/analytics-service/k8s/hpa.yaml
-  - ../../../../fase-2/analytics-service/k8s/kedaauthentication.yaml
-  - ../../../../fase-2/analytics-service/k8s/scaledobject.yaml
-  - externalsecret.yaml
+- ../../../analytics/k8s/base
+- externalsecret.yaml
 
 namespace: toggle
 
-patches:
+# piso de replicas ate o KEDA reconciliar (o ScaledObject e ajustado para
+# minReplicaCount: 1 no patch abaixo).
+replicas:
+- count: 1
+  name: analytics-deployment
+
   # tira os valores obsoletos do configmap
-  - target:
-      kind: ConfigMap
-      name: analytics-configmap
-    patch: |
-      - op: remove
-        path: /data/AWS_SQS_URL
-      - op: remove
-        path: /data/AWS_DYNAMODB_TABLE
-      - op: remove
-        path: /data/AWS_REGION
   # o deployment da fase-2 so tem configMapRef -> adiciona os secretRef.
   # aws-session-creds (chaves estaticas da sessao) e criado pelo
   # null_resource.eso_aws_creds no terraform; sem IRSA/IMDS no Academy, e a
   # unica fonte de credencial AWS para o worker SQS + DynamoDB.
-  - target:
-      kind: Deployment
-      name: analytics-deployment
-    patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/envFrom/-
-        value:
-          secretRef:
-            name: analytics-secret
-      - op: add
-        path: /spec/template/spec/containers/0/envFrom/-
-        value:
-          secretRef:
-            name: aws-session-creds
+# KEDA no AWS Academy: sem IRSA, o TriggerAuthentication nao pode usar
+# podIdentity. Troca por credenciais estaticas da sessao (Secret
+# aws-session-creds, criado pelo null_resource.eso_aws_creds).
+# scaledobject da fase-2 aponta para a fila/regiao antiga (us-east-2 /
+# conta 047719652987). Aponta para a fila real do lab.
+patches:
+- patch: |
+    - op: remove
+      path: /data/AWS_SQS_URL
+    - op: remove
+      path: /data/AWS_DYNAMODB_TABLE
+    - op: remove
+      path: /data/AWS_REGION
+  target:
+    kind: ConfigMap
+    name: analytics-configmap
+- patch: |
+    - op: add
+      path: /spec/template/spec/containers/0/envFrom/-
+      value:
+        secretRef:
+          name: analytics-secret
+    - op: add
+      path: /spec/template/spec/containers/0/envFrom/-
+      value:
+        secretRef:
+          name: aws-session-creds
+  target:
+    kind: Deployment
+    name: analytics-deployment
+- patch: |
+    - op: replace
+      path: /spec/minReplicaCount
+      value: 1
+  target:
+    kind: ScaledObject
+    name: analytics-service-scaler
+- patch: |
+    - op: remove
+      path: /spec/podIdentity
+    - op: add
+      path: /spec/secretTargetRef
+      value:
+        - parameter: awsAccessKeyID
+          name: aws-session-creds
+          key: AWS_ACCESS_KEY_ID
+        - parameter: awsSecretAccessKey
+          name: aws-session-creds
+          key: AWS_SECRET_ACCESS_KEY
+        - parameter: awsSessionToken
+          name: aws-session-creds
+          key: AWS_SESSION_TOKEN
+  target:
+    group: keda.sh
+    kind: TriggerAuthentication
+    name: keda-aws-credentials
+    version: v1alpha1
+- patch: |
+    - op: replace
+      path: /spec/triggers/0/metadata/queueURL
+      value: https://sqs.us-east-1.amazonaws.com/301035467324/tc-sqs
+    - op: replace
+      path: /spec/triggers/0/metadata/awsRegion
+      value: us-east-1
+    - op: remove
+      path: /spec/triggers/0/metadata/identityOwner
+  target:
+    group: keda.sh
+    kind: ScaledObject
+    name: analytics-service-scaler
+    version: v1alpha1
 
 # 'name' casa com a imagem dos manifests da Fase 2 (ECR antigo). O CI atualiza
 # newTag (commit SHA) via 'kustomize edit set image'.
 images:
-  - name: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/analytics-image
-    newName: 361075236043.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image
-    newTag: "1.0"
+- name: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/analytics-image
+  newName: 301035467324.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image
+  newTag: 0.0.0-lab.34-7ddbd47

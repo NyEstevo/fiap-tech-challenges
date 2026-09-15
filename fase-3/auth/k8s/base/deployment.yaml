@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-deployment
+  namespace: toggle
+  labels:
+    app: auth
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      containers:
+      - name: auth-container
+        image: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/auth-image:1.0
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "192Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 8001
+        envFrom:
+        - configMapRef:
+            name: auth-configmap
+        - secretRef:
+            name: auth-secret
+        # startupProbe absorve o cold start variavel (RDS frio, CNI sem IP no
+        # boot, throttle de CPU subindo o gunicorn). Ate ele passar, liveness e
+        # readiness ficam suspensos -- some a adivinhacao de initialDelaySeconds.
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          periodSeconds: 5
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          periodSeconds: 10
+          timeoutSeconds: 8
+          failureThreshold: 6
+          successThreshold: 1

@@ -25,7 +25,9 @@ DYNAMODB_TABLE_NAME = os.getenv("AWS_DYNAMODB_TABLE")
 AWS_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")
 
 if not all([AWS_REGION, SQS_QUEUE_URL, DYNAMODB_TABLE_NAME]):
-    log.critical("Erro: AWS_REGION, AWS_SQS_URL, e AWS_DYNAMODB_TABLE devem ser definidos.")
+    log.critical(
+        "Erro: AWS_REGION, AWS_SQS_URL, e AWS_DYNAMODB_TABLE devem ser definidos. disparo do argo"
+    )
     sys.exit(1)
 
 # --- Clientes Boto3 ---
@@ -34,7 +36,7 @@ try:
     session = boto3.Session(region_name=AWS_REGION)
     sqs_client = session.client("sqs", endpoint_url=AWS_ENDPOINT_URL)
     dynamodb_client = session.client("dynamodb", endpoint_url=AWS_ENDPOINT_URL)
-    log.info(f"Clientes Boto3 inicializados na região {AWS_REGION}")
+    log.info(f"Clientes Boto3 inicializados na região {AWS_REGION} com sucesso na pipeline.")
 except NoCredentialsError:
     log.critical("Credenciais da AWS não encontradas. Verifique seu ambiente.")
     sys.exit(1)

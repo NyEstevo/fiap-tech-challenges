@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flags-migrate
+  namespace: toggle
+  annotations:
+    # resource normal (nao hook): waves ordenam ExternalSecret(-3) -> Job(-2)
+    # -> Deployment(0). O nome deste Job ganha sufixo do SHA da imagem (ver
+    # kustomization.yaml deste diretorio e o step "bump da imagem" do CI) --
+    # cada deploy cria um objeto novo em vez de tentar editar um Job existente.
+    # 'spec.template' do Job e imutavel, entao SEM nome unico seria obrigatorio
+    # 'kubectl replace --force' (delete + create) a cada bump de tag; isso
+    # colidia com o selfHeal do ArgoCD (o Job some por ttl/replace, o ArgoCD
+    # acha que e drift e recria, num loop). Nome unico evita o replace: e
+    # sempre um create novo, e o Job antigo e limpo pelo prune (nome antigo
+    # nao existe mais no git) em vez de por ttlSecondsAfterFinished.
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: flags
+        job: migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      initContainers:
+        - name: wait-for-db
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -d "$DATABASE_URL"; do
+                echo "aguardando o banco..."; sleep 2;
+              done
+          envFrom:
+            - secretRef:
+                name: flags-secret
+      containers:
+        - name: migrate
+          # mesma imagem da aplicacao (Alembic + alembic/ ja embarcados);
+          # o CI reescreve name+tag via 'kustomize edit set image'
+          image: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/flags-image
+          command: ["alembic", "upgrade", "head"]
+          workingDir: /app
+          envFrom:
+            - secretRef:
+                name: flags-secret
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "50m"

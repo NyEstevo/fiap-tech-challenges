@@ -113,6 +113,23 @@ resource "helm_release" "argocd" {
         }
         params = {
           "server.insecure" = true # TLS termina no ingress-nginx
+
+          # Sem isto o `--policy` global (default `sync`) prevalece e o
+          # `applicationsSync: create-only` do ApplicationSet toggle-master
+          # (fase-3/gitops/applicationset.yaml) e ignorado -- ele passaria a
+          # atualizar/deletar Applications durante a adocao. Lido como env
+          # ARGOCD_APPLICATIONSET_CONTROLLER_ENABLE_POLICY_OVERRIDE pelo
+          # applicationset-controller (argo-helm 7.6.12).
+          "applicationsetcontroller.enable.policy.override" = true
+
+          # ServerSideDiff: o application-controller calcula o diff via SSA
+          # dry-run contra o API server, entao os defaults de schema de CRD
+          # (ex.: ExternalSecret ganha spec.data[].remoteRef.conversionStrategy
+          # /decodingStrategy/metadataPolicy e target.deletionPolicy do
+          # webhook do External Secrets Operator) entram nos DOIS lados da
+          # comparacao e param de aparecer como OutOfSync fantasma. Sem isto
+          # o diff e client-side e nao conhece o schema do CRD.
+          "controller.diff.server.side" = true
         }
       }
       server = {

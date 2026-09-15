@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Isolado do kustomization.yaml pai de proposito: o 'nameSuffix' abaixo so
+# pode alcancar o Job (unico resource listado aqui). Se estivesse no
+# kustomization.yaml pai, o nameSuffix rebatizaria TODOS os resources do
+# overlay (Deployment, Service, ExternalSecret...) e quebraria o nome logico
+# acoplado ao Ingress e as kustomizations. O CI roda
+# 'kustomize edit set namesuffix' dentro desta pasta (ver
+# _reusable-ci-service.yml, step "bump da imagem") para cada deploy.
+resources:
+- migrate-job.yaml
+
+nameSuffix: -unset
