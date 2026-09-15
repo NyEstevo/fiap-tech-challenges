@@ -13,7 +13,7 @@ Automatizamos toda a infraestrutura e o ciclo de vida dos 5 microsserviços do T
 
 ## Entregáveis da Fase 3
 
-1. **Vídeo de Demonstração (até 20 minutos):** [**Nossa Apresentação**](https://youtu.be/2QOhdMUwSYo)
+1. **Vídeo de Demonstração (até 20 minutos):** [**Vídeo de Demonstração Tech Challenge Fase 3**](https://youtu.be/2QOhdMUwSYo)
 
 2. **Documentação Separada por Tópicos:**
 
