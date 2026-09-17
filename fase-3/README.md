@@ -137,9 +137,6 @@ action **`.github/actions/aws-auth`** (lab → chaves estáticas de sessão;
 (`.checkov.yaml` com baseline justificada para o AWS Academy) +
 **`trivy config --severity CRITICAL --exit-code 1`**.
 
-A demonstração da regra de bloqueio (dependência com CVE crítico → pipeline
-vermelho) está em [`DEVSECOPS-DEMO.md`](./DEVSECOPS-DEMO.md).
-
 ## Entrega Contínua (CD) & GitOps
 
 Abandonamos o push direto de manifests via CI em favor de **GitOps**:
