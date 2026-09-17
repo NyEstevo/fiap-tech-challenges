@@ -24,8 +24,6 @@ Automatizamos toda a infraestrutura e o ciclo de vida dos 5 microsserviços do T
 - [Entrega Contínua (CD) & GitOps](#entrega-contínua-cd--gitops);
 - [Dificuldades Encontradas](#dificuldades-encontradas);
 - [Estimativa de Custos](#estimativa-de-custos);
-- [Diagrama de Arquitetura](#diagrama-de-arquitetura);
-- [Integrantes do Grupo](#integrantes-do-grupo);
 
 3. **Código Fonte no Repositório:**
 
