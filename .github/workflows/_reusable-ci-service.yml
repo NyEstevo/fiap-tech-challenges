@@ -98,6 +98,10 @@ jobs:
         with:
           version: v2.8.0
           working-directory: ${{ inputs.working_directory }}
+          # 'config verify' baixa o JSON schema de golangci-lint.run a cada run;
+          # timeout nesse site derrubava o CI sem relacao com o codigo. O lint
+          # em si continua igual.
+          verify: false
 
       # ---- Python: ruff (config em fase-2/.ruff.toml) ----
       - name: ruff
