@@ -48,7 +48,7 @@ spec:
                 name: auth-configmap
             - secretRef:
                 name: auth-secret
-          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/auth-image:0.0.0-lab.36-dd748db
+          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/auth-image:0.0.0-lab.38-7a5099d
           livenessProbe:
             failureThreshold: 3
             httpGet:
@@ -89,7 +89,7 @@ kind: Job
 metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
-  name: auth-migrate-dd748db
+  name: auth-migrate-7a5099d
   namespace: toggle
 spec:
   activeDeadlineSeconds: 600
@@ -108,7 +108,7 @@ spec:
           envFrom:
             - secretRef:
                 name: auth-secret
-          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/auth-migrate-image:0.0.0-lab.36-dd748db
+          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/auth-migrate-image:0.0.0-lab.38-7a5099d
           name: migrate
           resources:
             limits:
