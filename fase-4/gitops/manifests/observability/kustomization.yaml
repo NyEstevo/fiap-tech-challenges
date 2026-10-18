@@ -6,3 +6,4 @@ kind: Kustomization
 # o dashboard customizado e as regras de alerta do Grafana.
 resources:
 - namespace.yaml
+- grafana-admin.yaml

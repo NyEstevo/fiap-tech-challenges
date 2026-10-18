@@ -1,0 +1,114 @@
+# fase-4/gitops/values/kube-prometheus-stack.yaml
+# Chart prometheus-community/kube-prometheus-stack (versao em components.yaml).
+#
+# Escolhas para o lab (3x t3.medium, cluster recriado a cada sessao do
+# AWS Academy): sem disco persistente, retencao curta, requests enxutos.
+# Tudo que importa (datasources, dashboards, alertas) e provisionado como
+# codigo, entao perder os dados ao recriar o pod nao perde configuracao.
+
+# Alertas vao pelo Grafana Unified Alerting (fatia 9) -> PagerDuty/Slack/
+# webhook. Alertmanager seria um pod a mais sem uso.
+alertmanager:
+  enabled: false
+
+# Componentes do control plane do EKS sao gerenciados pela AWS e nao expoem
+# metricas para dentro do cluster: os targets ficariam eternamente "down".
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+defaultRules:
+  # As recording rules alimentam os dashboards padrao do chart (CPU/memoria
+  # por namespace/pod). Os grupos abaixo sao dos componentes desligados acima.
+  create: true
+  rules:
+    alertmanager: false
+    etcd: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+
+prometheusOperator:
+  # O webhook de admissao instala Jobs-hook de patch de certificado, que
+  # brigam com o ciclo de sync do ArgoCD. A validacao de PrometheusRule nao e
+  # necessaria aqui (as regras sao versionadas e revisadas em PR).
+  admissionWebhooks:
+    enabled: false
+  tls:
+    enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+prometheus:
+  prometheusSpec:
+    # Recebe as metricas que o OTel Collector (fatia 4) envia por OTLP em
+    # /api/v1/otlp/v1/metrics -- sem exporter Prometheus legado no meio.
+    enableOTLPReceiver: true
+    otlp:
+      # Atributos de recurso que viram label em toda serie (sem precisar de
+      # join com target_info). service.name ja vira `job` automaticamente.
+      promoteResourceAttributes:
+        - service.namespace
+        - deployment.environment
+        - k8s.namespace.name
+        - k8s.deployment.name
+        - k8s.pod.name
+    tsdb:
+      # Amostras OTLP podem chegar levemente fora de ordem (batch do Collector).
+      outOfOrderTimeWindow: 30m
+
+    retention: 2d
+    retentionSize: 4GB
+    # Sem storageSpec = emptyDir: o lab nao tem EBS CSI driver e o cluster e
+    # recriado a cada sessao.
+
+    # Seleciona ServiceMonitors/PodMonitors/regras de qualquer release, nao
+    # so os deste chart (Loki e Collector trazem os seus).
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits: { memory: 1Gi }
+
+grafana:
+  # Senha gerada uma unica vez pelo ESO (Password generator) em
+  # manifests/observability/grafana-admin.yaml. Sem isso o chart gera senha
+  # aleatoria a cada render -> diff eterno no ArgoCD e senha trocando.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # Acesso so por `kubectl port-forward` (nada exposto na internet).
+  # Para expor: ingress.enabled=true com ingressClassName nginx.
+  ingress:
+    enabled: false
+
+  defaultDashboardsTimezone: America/Sao_Paulo
+
+  # Pod de `helm test` (hook=test): sem uso no GitOps, so ocuparia vaga.
+  testFramework:
+    enabled: false
+
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { memory: 384Mi }
+
+kube-state-metrics:
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+prometheus-node-exporter:
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { memory: 64Mi }

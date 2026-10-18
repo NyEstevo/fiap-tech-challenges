@@ -1,0 +1,44 @@
+# Senha de admin do Grafana gerada DENTRO do cluster pelo ESO, uma unica vez.
+#
+# Por que nao deixar o chart gerar: o chart do Grafana sorteia uma senha nova
+# a cada `helm template`; o ArgoCD renderiza a cada refresh, entao o Secret
+# ficaria eternamente OutOfSync e a senha mudaria sozinha.
+# Por que nao Secrets Manager: nao ha nada externo a guardar -- ninguem fora
+# do cluster precisa conhecer a senha antes dela existir.
+#
+# Ler a senha:
+#   kubectl -n observability get secret grafana-admin \
+#     -o jsonpath='{.data.admin-password}' | base64 -d
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: Password
+metadata:
+  name: grafana-admin-password
+  namespace: observability
+spec:
+  length: 24
+  digits: 5
+  symbols: 0
+  noUpper: false
+  allowRepeat: true
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: grafana-admin
+  namespace: observability
+spec:
+  # "0" = gera uma vez e nunca mais renova (senha estavel durante a sessao).
+  refreshInterval: "0"
+  target:
+    name: grafana-admin
+    creationPolicy: Owner
+    template:
+      data:
+        admin-user: admin
+        admin-password: "{{ .password }}"
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: Password
+          name: grafana-admin-password
