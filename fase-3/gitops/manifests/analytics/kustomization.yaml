@@ -87,7 +87,7 @@ patches:
 - patch: |
     - op: replace
       path: /spec/triggers/0/metadata/queueURL
-      value: https://sqs.us-east-1.amazonaws.com/301035467324/tc-sqs
+      value: https://sqs.us-east-1.amazonaws.com/238903440658/tc-sqs
     - op: replace
       path: /spec/triggers/0/metadata/awsRegion
       value: us-east-1
@@ -103,5 +103,5 @@ patches:
 # newTag (commit SHA) via 'kustomize edit set image'.
 images:
 - name: 047719652987.dkr.ecr.us-east-2.amazonaws.com/tech-challenge/analytics-image
-  newName: 301035467324.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image
+  newName: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image
   newTag: 0.0.0-lab.34-7ddbd47
