@@ -42,3 +42,13 @@
   repoURL: https://grafana.github.io/helm-charts
   chart: loki
   version: 7.3.0
+
+# OTel Collector (DaemonSet): recebe OTLP dos servicos + logs dos containers
+# e roteia para Prometheus, Loki e (fatia 7) Datadog.
+- name: otel-collector
+  namespace: observability
+  type: helm
+  sourcePath: ""
+  repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+  chart: opentelemetry-collector
+  version: 0.176.0
