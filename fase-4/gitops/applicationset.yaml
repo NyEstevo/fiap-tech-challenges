@@ -16,13 +16,19 @@
 # um conjunto de parametros (applicationset/generators/git.go@v2.12.6).
 #
 # Dois tipos de item:
-#   type: manifests  -> fonte unica: diretorio Kustomize deste repo (`path`)
+#   type: manifests  -> fonte unica: diretorio Kustomize deste repo
+#                       (`sourcePath`)
 #   type: helm       -> multi-source: chart do repo oficial (`repoURL`,
 #                       `chart`, `version`) + values versionados aqui em
 #                       fase-4/gitops/values/<name>.yaml (via ref `$values`)
 #
 # Todo item tem as mesmas chaves (as que nao se aplicam ficam ""): com
 # `missingkey=error` uma chave ausente quebra o template inteiro.
+#
+# NUNCA use a chave `path` num item: o git files generator injeta o seu
+# proprio `path` (mapa com path/basename/filename/segments do arquivo lido)
+# e ele SOBRESCREVE o do item -- a Application recebia o mapa como
+# diretorio ("app path does not exist"). Por isso `sourcePath`.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -82,7 +88,7 @@ spec:
       {{- else }}
         - repoURL: https://github.com/NyEstevo/fiap-tech-challenges.git
           targetRevision: lab
-          path: '{{ .path }}'
+          path: '{{ .sourcePath }}'
       {{- end }}
 
   syncPolicy:

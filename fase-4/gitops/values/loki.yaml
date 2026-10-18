@@ -1,0 +1,93 @@
+# fase-4/gitops/values/loki.yaml
+# Chart grafana/loki (versao em components.yaml).
+#
+# Modo SingleBinary: um unico pod com todos os componentes do Loki. O default
+# do chart (SimpleScalable) sobe 3 write + 3 read + 3 backend + gateway +
+# memcached -- muito alem do que cabe no lab.
+#
+# Os logs chegam pelo OTel Collector (fatia 4) via OTLP nativo do Loki 3
+# (POST /otlp/v1/logs). Nao ha Promtail: ele foi descontinuado e o
+# Collector com `filelog` faz o mesmo papel.
+deploymentMode: SingleBinary
+
+loki:
+  # Um unico "tenant": sem isso todo request precisaria do header X-Scope-OrgID.
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  # Disco local do pod. O lab nao tem EBS CSI driver (a StorageClass gp2 usa o
+  # provisioner in-tree, que nao funciona mais) e o cluster e recriado a cada
+  # sessao do AWS Academy -- nao ha o que preservar entre sessoes.
+  storage:
+    type: filesystem
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  limits_config:
+    # Atributos OTLP que nao viram label (trace_id, span_id, ...) ficam como
+    # structured metadata -- e o que permite pular de um log para o trace.
+    allow_structured_metadata: true
+    volume_enabled: true
+    retention_period: 48h
+
+  compactor:
+    # Sem isso o retention_period acima nao apaga nada.
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: false
+  # Sem persistence o chart nao monta nada em /var/loki (path_prefix), e o
+  # container roda com readOnlyRootFilesystem: o Loki falharia ao gravar
+  # chunks/indice. emptyDir = disco do no, vive enquanto o pod viver.
+  extraVolumes:
+    - name: storage
+      emptyDir:
+        sizeLimit: 4Gi
+  extraVolumeMounts:
+    - name: storage
+      mountPath: /var/loki
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
+
+# SimpleScalable / Distributed desligados.
+write:
+  replicas: 0
+read:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Pecas opcionais desligadas para economizar pods e memoria:
+#   gateway   nginx na frente do Loki; com um so pod, o Grafana e o Collector
+#             falam direto com o Service `loki:3100`.
+#   caches    memcached de chunks/resultados (o chunksCache sozinho reserva GBs).
+#   canary    DaemonSet que gera logs sinteticos para medir o proprio Loki.
+#   test      pod de `helm test` (hook) -- sem uso no GitOps.
+#   sidecar   carregador de regras de alerta do Loki; alertas vao pelo Grafana.
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+sidecar:
+  rules:
+    enabled: false

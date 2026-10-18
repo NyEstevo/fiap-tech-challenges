@@ -7,7 +7,8 @@
 #              Applications da fase-3 (auth-service ... platform, ingress).
 #   namespace  namespace de destino
 #   type       manifests | helm
-#   path       (manifests) diretorio Kustomize neste repo
+#   sourcePath (manifests) diretorio Kustomize neste repo. Nao e `path`: o
+#              generator injeta um `path` proprio que sobrescreveria este.
 #   repoURL    (helm) repositorio do chart
 #   chart      (helm) nome do chart
 #   version    (helm) versao fixa do chart -- nunca range
@@ -18,7 +19,26 @@
 - name: observability
   namespace: observability
   type: manifests
-  path: fase-4/gitops/manifests/observability
+  sourcePath: fase-4/gitops/manifests/observability
   repoURL: ""
   chart: ""
   version: ""
+
+# Prometheus + Grafana + kube-state-metrics + node-exporter (+ operator).
+# Alertmanager desligado: alertas vao pelo Grafana (fatia 9).
+- name: kube-prometheus-stack
+  namespace: observability
+  type: helm
+  sourcePath: ""
+  repoURL: https://prometheus-community.github.io/helm-charts
+  chart: kube-prometheus-stack
+  version: 92.10.1
+
+# Logs centralizados de todos os containers (chegam via OTel Collector).
+- name: loki
+  namespace: observability
+  type: helm
+  sourcePath: ""
+  repoURL: https://grafana.github.io/helm-charts
+  chart: loki
+  version: 7.3.0
