@@ -1,0 +1,24 @@
+# fase-4/gitops/components.yaml
+# Fonte unica da stack de observabilidade. Cada item = uma Application gerada
+# por fase-4/gitops/applicationset.yaml.
+#
+# Chaves (todas obrigatorias; use "" quando nao se aplica):
+#   name       nome da Application e do release Helm. NAO pode colidir com as
+#              Applications da fase-3 (auth-service ... platform, ingress).
+#   namespace  namespace de destino
+#   type       manifests | helm
+#   path       (manifests) diretorio Kustomize neste repo
+#   repoURL    (helm) repositorio do chart
+#   chart      (helm) nome do chart
+#   version    (helm) versao fixa do chart -- nunca range
+#
+# A lista nunca fica vazia: o generator transforma arquivo vazio em um item
+# sem chaves, e o template falha com missingkey=error.
+
+- name: observability
+  namespace: observability
+  type: manifests
+  path: fase-4/gitops/manifests/observability
+  repoURL: ""
+  chart: ""
+  version: ""

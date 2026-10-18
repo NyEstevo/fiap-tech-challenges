@@ -41,9 +41,14 @@ locals {
   dynamodb_owner = one([for s in local.services : s.name if s.dynamodb.enabled])
 
   ingress_nginx_values_path = "${path.module}/../../../../../fase-2/ingress-nginx-values.yaml"
-  # Manifesto de bootstrap do GitOps: o ApplicationSet `toggle-master` que
-  # gera/adota as 7 Applications (substituiu a root-app app-of-apps).
-  gitops_root_app_path = "${path.module}/../../../../gitops/applicationset.yaml"
+  # Manifestos de bootstrap do GitOps, aplicados em ordem:
+  #   - fase-3: ApplicationSet `toggle-master` que gera/adota as 7
+  #     Applications (substituiu a root-app app-of-apps);
+  #   - fase-4: ApplicationSet `observability` (stack de monitoramento).
+  gitops_root_app_paths = [
+    "${path.module}/../../../../gitops/applicationset.yaml",
+    "${path.module}/../../../../../fase-4/gitops/applicationset.yaml",
+  ]
 }
 
 data "aws_iam_role" "lab" {
@@ -350,7 +355,7 @@ resource "null_resource" "eso_aws_creds" {
 # recurso exige conexao viva com a API do cluster ja no `plan`, o que quebra
 # o 1o apply de um ambiente vazio e o `tf-plan` do CI. O null_resource so
 # executa no apply, depois que os add-ons (inclusive ArgoCD + CRDs) subiram.
-# Idempotente (kubectl apply); re-roda quando applicationset.yaml muda.
+# Idempotente (kubectl apply); re-roda quando qualquer ApplicationSet muda.
 #
 # NOTA DE CUTOVER (cluster que ja roda a antiga root-app `toggle-master-root`):
 # aplicar este manifesto so ADOTA as 7 Applications (create-only). A root-app
@@ -365,7 +370,7 @@ resource "null_resource" "root_app" {
   triggers = {
     cluster      = var.cluster_name
     region       = var.region
-    manifest_sha = filesha256(local.gitops_root_app_path)
+    manifest_sha = sha256(join(",", [for p in local.gitops_root_app_paths : filesha256(p)]))
   }
 
   provisioner "local-exec" {
@@ -376,7 +381,7 @@ resource "null_resource" "root_app" {
         kubectl get crd applicationsets.argoproj.io >/dev/null 2>&1 && break
         echo "aguardando CRD do ArgoCD ($i/30)..."; sleep 10
       done
-      kubectl apply -f ${local.gitops_root_app_path}
+      kubectl apply ${join(" ", [for p in local.gitops_root_app_paths : "-f ${p}"])}
     EOT
   }
 
