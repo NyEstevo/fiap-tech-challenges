@@ -95,6 +95,22 @@ grafana:
 
   defaultDashboardsTimezone: America/Sao_Paulo
 
+  # O chart provisiona o datasource Alertmanager mesmo com alertmanager.enabled
+  # false -> apareceria quebrado no Grafana.
+  sidecar:
+    datasources:
+      alertmanager:
+        enabled: false
+
+  # Prometheus ja vem provisionado pelo chart; Loki entra aqui (fatia 3).
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.observability.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+
   # Pod de `helm test` (hook=test): sem uso no GitOps, so ocuparia vaga.
   testFramework:
     enabled: false
