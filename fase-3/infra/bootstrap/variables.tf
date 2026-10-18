@@ -7,7 +7,7 @@ variable "region" {
 variable "state_bucket_name" {
   description = "Nome do bucket S3 do Terraform state. Precisa ser globalmente unico."
   type        = string
-  default     = "tc-fiap-tfstate-361075236043"
+  default     = "tc-fiap-tfstate-238903440658"
 }
 
 variable "lock_table_name" {

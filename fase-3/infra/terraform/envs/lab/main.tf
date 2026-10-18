@@ -71,6 +71,9 @@ module "networking" {
 # EKS
 ########################################################################
 
+# node_desired = 3: a stack de observabilidade da fase-4 (~9 pods) nao cabe no
+# teto de 34 pods de 2x t3.medium (17 pods/no). desired_size tem ignore_changes
+# no modulo -- cluster ja existente escala via `aws eks update-nodegroup-config`.
 module "eks" {
   source = "../../modules/eks"
 
@@ -81,7 +84,7 @@ module "eks" {
   lab_role_arn         = data.aws_iam_role.lab.arn
   node_instance_types  = var.node_instance_types
   node_min             = 1
-  node_desired         = 2
+  node_desired         = 3
   node_max             = 4
   admin_principal_arns = var.admin_principal_arns
 }

@@ -7,7 +7,7 @@ variable "region" {
 variable "account_id" {
   description = "ID da conta AWS (usado para montar ARNs)."
   type        = string
-  default     = "361075236043"
+  default     = "238903440658"
 }
 
 variable "environment" {
