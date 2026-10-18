@@ -22,3 +22,13 @@
   repoURL: ""
   chart: ""
   version: ""
+
+# Prometheus + Grafana + kube-state-metrics + node-exporter (+ operator).
+# Alertmanager desligado: alertas vao pelo Grafana (fatia 9).
+- name: kube-prometheus-stack
+  namespace: observability
+  type: helm
+  path: ""
+  repoURL: https://prometheus-community.github.io/helm-charts
+  chart: kube-prometheus-stack
+  version: 92.10.1
