@@ -32,3 +32,12 @@
   repoURL: https://prometheus-community.github.io/helm-charts
   chart: kube-prometheus-stack
   version: 92.10.1
+
+# Logs centralizados de todos os containers (chegam via OTel Collector).
+- name: loki
+  namespace: observability
+  type: helm
+  path: ""
+  repoURL: https://grafana.github.io/helm-charts
+  chart: loki
+  version: 7.3.0
