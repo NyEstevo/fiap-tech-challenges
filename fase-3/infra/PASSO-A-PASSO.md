@@ -3,9 +3,9 @@
 Guia sequencial para levar o ToggleMaster da Fase 2 (operação manual) para a
 Fase 3 (Terraform + CI/CD + GitOps). Execute os passos **na ordem**.
 
-- **Conta / região:** AWS Academy `361075236043`, `us-east-1`
+- **Conta / região:** AWS Academy `238903440658`, `us-east-1`
 - **Cluster:** `tc-eks` · **Namespace:** `toggle`
-- **State remoto:** `s3://tc-fiap-tfstate-361075236043`, lock `tc-fiap-tflock`
+- **State remoto:** `s3://tc-fiap-tfstate-238903440658`, lock `tc-fiap-tflock`
 
 > Sob o AWS Academy o Terraform **não cria IAM Role/Policy/OIDC**. Cluster e nodes
 > usam a `LabRole`; os workflows usam chaves estáticas da sessão do lab.
@@ -49,7 +49,7 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 ```bash
 aws sts get-caller-identity
-# Account deve ser301035467324
+# Account deve ser 238903440658
 ```
 
 ---
@@ -69,12 +69,12 @@ terraform apply
 Confirme:
 
 ```bash
-aws s3api head-bucket --bucket tc-fiap-tfstate-361075236043 && echo "bucket OK"
+aws s3api head-bucket --bucket tc-fiap-tfstate-238903440658 && echo "bucket OK"
 aws dynamodb describe-table --table-name tc-fiap-tflock --query 'Table.TableStatus'
 ```
 
 > Se o bucket já existir de uma tentativa anterior, rode
-> `terraform import aws_s3_bucket.tfstate tc-fiap-tfstate-361075236043` e
+> `terraform import aws_s3_bucket.tfstate tc-fiap-tfstate-238903440658` e
 > `terraform import aws_dynamodb_table.tflock tc-fiap-tflock` antes do apply.
 
 Volte para a raiz:
@@ -131,7 +131,7 @@ cp terraform.tfvars.example terraform.tfvars   # já vem versionado; edite se ne
 Ajuste em `terraform.tfvars` se preciso:
 
 - `admin_principal_arns` — inclua o ARN da role/usuário que vai rodar `kubectl`
-  (ex.: `arn:aws:iam::361075236043:role/LabRole` já está lá).
+  (ex.: `arn:aws:iam::238903440658:role/LabRole` já está lá).
 - CIDRs, tipos de instância — os defaults já são enxutos para o Academy.
 
 **Não** coloque senha de banco aqui — o Terraform gera e guarda no Secrets Manager.
