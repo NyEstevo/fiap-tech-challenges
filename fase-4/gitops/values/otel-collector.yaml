@@ -1,0 +1,104 @@
+# fase-4/gitops/values/otel-collector.yaml
+# Chart open-telemetry/opentelemetry-collector (versao em components.yaml).
+#
+# A "central dos Correios" da observabilidade: os servicos mandam TUDO
+# (metricas, logs, traces) por OTLP para o Collector do proprio no, e ele
+# roteia cada sinal para o backend certo:
+#
+#   metricas  -> Prometheus  (receptor OTLP nativo, /api/v1/otlp)
+#   logs      -> Loki        (receptor OTLP nativo, /otlp)
+#   traces    -> debug por enquanto; Datadog na fatia 7
+#
+# DaemonSet (1 pod por no): le os logs de todos os containers do no direto
+# de /var/log/pods (`filelog`, substitui o Promtail descontinuado) e recebe
+# OTLP pela hostPort -- os servicos apontam para o IP do proprio no
+# (status.hostIP), sem atravessar a rede para outro no.
+mode: daemonset
+
+# contrib: traz os componentes que o core nao tem (k8sattributes, filelog e,
+# na fatia 7, o exporter/connector do Datadog).
+image:
+  repository: otel/opentelemetry-collector-contrib
+command:
+  name: otelcol-contrib
+
+presets:
+  # Receiver filelog sobre /var/log/pods (+ parser do formato do containerd)
+  # e os volumes hostPath para le-lo. Logs do proprio Collector ficam de fora
+  # para nao virar loop (o Collector logando que leu o proprio log).
+  logsCollection:
+    enabled: true
+    includeCollectorLogs: false
+  # Processor k8sattributes + RBAC para consultar a API: anexa namespace,
+  # deployment, pod e no a cada metrica/log/trace.
+  kubernetesAttributes:
+    enabled: true
+
+# Jaeger e Zipkin nao sao usados: os servicos falam OTLP.
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+
+  processors:
+    # Mesmo se o servico nao informar, todo sinal sai com o cluster e o
+    # ambiente (diferenca entre ambientes e configuracao, nao codigo).
+    resource:
+      attributes:
+        - key: k8s.cluster.name
+          value: tc-eks
+          action: upsert
+        - key: deployment.environment
+          value: lab
+          action: insert
+
+  exporters:
+    # Prometheus 3: otlphttp acrescenta /v1/metrics ao endpoint.
+    otlphttp/prometheus:
+      endpoint: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/otlp
+      tls:
+        insecure: true
+    # Loki 3: otlphttp acrescenta /v1/logs ao endpoint.
+    otlphttp/loki:
+      endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+      tls:
+        insecure: true
+    # Traces ainda sem backend (Datadog chega na fatia 7). Amostra pouca coisa
+    # no log do proprio Collector so para provar que estao chegando.
+    debug:
+      verbosity: basic
+      sampling_initial: 5
+      sampling_thereafter: 200
+
+  service:
+    pipelines:
+      # Ordem dos processors: memory_limiter primeiro (protege antes de
+      # gastar memoria), batch por ultimo (agrupa o que ja foi enriquecido).
+      metrics:
+        receivers: [otlp, prometheus]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [otlphttp/prometheus]
+      logs:
+        receivers: [otlp, filelog]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [otlphttp/loki]
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [debug]
+
+# memory_limiter usa limit_percentage (80% do limit abaixo); GOMEMLIMIT
+# (useGOMEMLIMIT, default true) acompanha o mesmo limit.
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { memory: 384Mi }
