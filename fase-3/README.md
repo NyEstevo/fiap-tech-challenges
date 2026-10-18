@@ -195,7 +195,7 @@ independente, gerada a partir do respectivo `fase-3/gitops/manifests/<svc>`.
 
 - **Conta/região herdadas erradas da Fase 2:** os manifests e o Terraform
   vinham com `us-east-2`/`047719652987` (fase anterior); o Academy usa outra
-  conta (`361075236043`) e não libera `us-east-2` no Learner Lab.
+  conta (`238903440658`) e não libera `us-east-2` no Learner Lab.
 - **Access Entry errado impedindo os nodes de entrar no cluster:** a `LabRole`
   estava com Access Entry `STANDARD` em vez de `EC2_LINUX`, quebrando
   `metrics-server`/`kubectl top|logs|exec` com `tls: internal error` — causa
