@@ -52,7 +52,7 @@ spec:
                 name: evaluation-secret
             - secretRef:
                 name: aws-session-creds
-          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/evaluation-image:0.0.0-lab.42-dd748db
+          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/evaluation-image:0.0.0-lab.44-7a5099d
           livenessProbe:
             failureThreshold: 3
             httpGet:
