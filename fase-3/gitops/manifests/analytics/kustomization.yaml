@@ -14,6 +14,10 @@ resources:
 - ../../../analytics/k8s/base
 - externalsecret.yaml
 
+# Variaveis padrao do OpenTelemetry (fase-4), iguais nos 5 servicos.
+components:
+- ../../../components/otel
+
 namespace: toggle
 
 # piso de replicas ate o KEDA reconciliar (o ScaledObject e ajustado para

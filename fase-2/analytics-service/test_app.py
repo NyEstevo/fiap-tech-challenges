@@ -24,3 +24,43 @@ def test_health_ok():
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.get_json() == {"status": "ok"}
+
+
+def test_trace_context_continua_o_trace_do_produtor():
+    from opentelemetry import trace
+
+    traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    message = {
+        "MessageAttributes": {"traceparent": {"DataType": "String", "StringValue": traceparent}}
+    }
+
+    span_ctx = trace.get_current_span(app_module.trace_context(message)).get_span_context()
+
+    assert format(span_ctx.trace_id, "032x") == "4bf92f3577b34da6a3ce929d0e0e4736"
+    assert format(span_ctx.span_id, "016x") == "00f067aa0ba902b7"
+    assert span_ctx.is_remote
+
+
+def test_trace_context_sem_atributos_nao_quebra():
+    from opentelemetry import trace
+
+    ctx = app_module.trace_context({"MessageId": "m-1"})
+    assert not trace.get_current_span(ctx).get_span_context().is_valid
+
+
+def test_process_message_salva_e_apaga_a_mensagem():
+    message = {
+        "MessageId": "m-1",
+        "ReceiptHandle": "rh-1",
+        "Body": '{"user_id": "u1", "flag_name": "f1", "result": true, "timestamp": "t"}',
+    }
+    with (
+        mock.patch.object(app_module, "dynamodb_client") as ddb,
+        mock.patch.object(app_module, "sqs_client") as sqs,
+    ):
+        app_module.process_message(message)
+
+    ddb.put_item.assert_called_once()
+    sqs.delete_message.assert_called_once_with(
+        QueueUrl=os.environ["AWS_SQS_URL"], ReceiptHandle="rh-1"
+    )

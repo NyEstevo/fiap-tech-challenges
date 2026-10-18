@@ -30,7 +30,12 @@ if not DATABASE_URL or not AUTH_SERVICE_URL:
 # --- Pool de Conexão com o Banco ---
 # Inicializa o pool de conexões (Mín: 1, Máx: 5 conexões)
 try:
-    pool = SimpleConnectionPool(1, 5, dsn=DATABASE_URL)
+    # RealDictCursor como padrao da CONEXAO (e nao por chamada de cursor()):
+    # a instrumentacao OTel do psycopg2 envolve o cursor_factory da conexao;
+    # um cursor_factory passado em cursor() o substituiria e as queries
+    # sumiriam do trace. Os cursor() que so fazem DELETE/rowcount nao leem
+    # linhas, entao o tipo de linha nao muda nada para eles.
+    pool = SimpleConnectionPool(1, 5, dsn=DATABASE_URL, cursor_factory=RealDictCursor)
     log.info("Pool de conexões com o PostgreSQL inicializado. disparo do argo")
 except psycopg2.OperationalError as e:
     log.critical(f"Erro fatal ao conectar ao PostgreSQL: {e}")
@@ -98,7 +103,7 @@ def create_flag():
     cur = None
     try:
         conn = pool.getconn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur = conn.cursor()
         cur.execute(
             "INSERT INTO flags (name, description, is_enabled, created_at, updated_at) "
             "VALUES (%s, %s, %s, NOW(), NOW()) RETURNING *",
@@ -133,7 +138,7 @@ def get_flags():
     cur = None
     try:
         conn = pool.getconn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur = conn.cursor()
         cur.execute("SELECT * FROM flags ORDER BY name")
         flags = cur.fetchall()
         return jsonify(flags)
@@ -155,7 +160,7 @@ def get_flag(name):
     cur = None
     try:
         conn = pool.getconn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur = conn.cursor()
         cur.execute("SELECT * FROM flags WHERE name = %s", (name,))
         flag = cur.fetchone()
         if not flag:
@@ -203,7 +208,7 @@ def update_flag(name):
     cur = None
     try:
         conn = pool.getconn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur = conn.cursor()
         cur.execute(query, tuple(values))
 
         if cur.rowcount == 0:

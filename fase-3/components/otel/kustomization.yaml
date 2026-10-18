@@ -1,0 +1,57 @@
+# fase-3/components/otel -- variaveis padrao do OpenTelemetry (fase-4)
+#
+# Um Component unico, incluido pelas 5 kustomizations de gitops/manifests/<svc>
+# (`components:`): nada aqui e por servico. O nome do servico sai do label
+# `app` do pod (auth -> auth-service), entao adicionar servico no
+# services.yaml nao exige mexer neste arquivo.
+#
+# Igual em todos os ambientes: o que muda entre lab/prod (cluster, ambiente)
+# o OTel Collector carimba (processor `resource` em fase-4/gitops/values/
+# otel-collector.yaml).
+#
+# JSON patch `add .../env`: cria a lista inteira. Hoje nenhum overlay define
+# `env` nos Deployments (so envFrom); se algum passar a definir, este patch
+# a SUBSTITUIRIA -- troque por um `add .../env/-` por variavel.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env
+        value:
+          # Collector do PROPRIO no (DaemonSet com hostPort 4317/4318).
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: APP_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['app']
+          - name: OTEL_SERVICE_NAME
+            value: $(APP_NAME)-service
+          # http/protobuf nos 5 (Go e Python): sem grpcio para compilar no
+          # Alpine das imagens Python.
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(HOST_IP):4318
+          - name: OTEL_EXPORTER_OTLP_PROTOCOL
+            value: http/protobuf
+          # k8s.pod.ip: o k8sattributes do Collector casa o sinal com o pod
+          # por este atributo (pela hostPort o IP de origem nao e confiavel).
+          - name: OTEL_RESOURCE_ATTRIBUTES
+            value: service.namespace=toggle-master,k8s.pod.ip=$(POD_IP)
+          # Metricas a cada 15s (default 60s): o alerta de 5xx (fatia 9)
+          # reage mais rapido.
+          - name: OTEL_METRIC_EXPORT_INTERVAL
+            value: "15000"
+          # Convencoes HTTP estaveis: http.server.request.duration (segundos)
+          # e http.response.status_code -- mesmo nome em Go e Python.
+          - name: OTEL_SEMCONV_STABILITY_OPT_IN
+            value: http

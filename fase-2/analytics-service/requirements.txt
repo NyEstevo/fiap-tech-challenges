@@ -2,3 +2,11 @@ Flask==3.1.0
 gunicorn==23.0.0
 python-dotenv==1.0.1
 boto3==1.35.99
+
+# OpenTelemetry (fase-4): ligado por telemetry.py no post_fork do gunicorn.
+# SDK 1.45.x <-> instrumentacoes 0.66bX sao lancadas em par.
+opentelemetry-sdk==1.45.1
+opentelemetry-exporter-otlp-proto-http==1.45.1
+opentelemetry-instrumentation-flask==0.66b1
+opentelemetry-instrumentation-logging==0.66b1
+opentelemetry-instrumentation-botocore==0.66b1
