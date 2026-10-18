@@ -49,7 +49,7 @@ spec:
                 name: flags-configmap
             - secretRef:
                 name: flags-secret
-          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/flags-image:0.0.0-lab.19-dd748db
+          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/flags-image:0.0.0-lab.21-7a5099d
           livenessProbe:
             failureThreshold: 3
             httpGet:
@@ -90,7 +90,7 @@ kind: Job
 metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
-  name: flags-migrate-dd748db
+  name: flags-migrate-7a5099d
   namespace: toggle
 spec:
   activeDeadlineSeconds: 600
@@ -109,7 +109,7 @@ spec:
           envFrom:
             - secretRef:
                 name: flags-secret
-          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/flags-image:0.0.0-lab.19-dd748db
+          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/flags-image:0.0.0-lab.21-7a5099d
           name: migrate
           resources:
             limits:
