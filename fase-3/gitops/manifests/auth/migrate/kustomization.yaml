@@ -11,4 +11,4 @@ kind: Kustomization
 resources:
 - migrate-job.yaml
 
-nameSuffix: -unset
+nameSuffix: -dd748db
