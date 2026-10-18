@@ -1,0 +1,8 @@
+# Declarado (e nao so via CreateNamespace=true) para versionar os labels e
+# para que o namespace exista antes de qualquer chart Helm da stack.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/part-of: observability

@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base da stack de observabilidade: o que nao vem de chart Helm. Nas proximas
+# fatias entram aqui os ExternalSecrets (Datadog, PagerDuty, Slack, GitHub),
+# o dashboard customizado e as regras de alerta do Grafana.
+resources:
+- namespace.yaml

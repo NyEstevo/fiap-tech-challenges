@@ -1,0 +1,90 @@
+# fase-4/gitops/applicationset.yaml
+#
+# ApplicationSet "observability" -- stack de monitoramento da Fase 4
+# (Prometheus, Grafana, Loki, OTel Collector, ...).
+#
+# Separado do ApplicationSet `toggle-master` da fase-3 de proposito: aquele
+# adota as 7 Applications vivas pelo nome gerado, e mexer no template dele
+# arrisca Application orfa (= pod derrubado com prune ativo). Aqui so nascem
+# Applications novas.
+#
+# FONTE UNICA: fase-4/gitops/components.yaml
+# ------------------------------------------
+# Uma lista; cada item vira UMA Application. Adicionar componente = adicionar
+# um item la e nada mais (mesma regra do services.yaml da fase-3). O git
+# file generator do ArgoCD v2.12 aceita arquivo com array: cada elemento vira
+# um conjunto de parametros (applicationset/generators/git.go@v2.12.6).
+#
+# Dois tipos de item:
+#   type: manifests  -> fonte unica: diretorio Kustomize deste repo (`path`)
+#   type: helm       -> multi-source: chart do repo oficial (`repoURL`,
+#                       `chart`, `version`) + values versionados aqui em
+#                       fase-4/gitops/values/<name>.yaml (via ref `$values`)
+#
+# Todo item tem as mesmas chaves (as que nao se aplicam ficam ""): com
+# `missingkey=error` uma chave ausente quebra o template inteiro.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: observability
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+
+  generators:
+    - git:
+        repoURL: https://github.com/NyEstevo/fiap-tech-challenges.git
+        revision: lab
+        files:
+          - path: fase-4/gitops/components.yaml
+
+  template:
+    metadata:
+      name: '{{ .name }}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/part-of: observability
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ .namespace }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          # CRDs grandes (kube-prometheus-stack) estouram o limite de 256KiB
+          # da annotation last-applied do client-side apply.
+          - ServerSideApply=true
+
+  # `sources` varia por tipo de item; campo de lista nao da para omitir no
+  # template, entao entra por templatePatch (renderizado como documento unico).
+  templatePatch: |
+    spec:
+      sources:
+      {{- if eq .type "helm" }}
+        - repoURL: '{{ .repoURL }}'
+          chart: '{{ .chart }}'
+          targetRevision: '{{ .version }}'
+          helm:
+            releaseName: '{{ .name }}'
+            valueFiles:
+              - $values/fase-4/gitops/values/{{ .name }}.yaml
+        - repoURL: https://github.com/NyEstevo/fiap-tech-challenges.git
+          targetRevision: lab
+          ref: values
+      {{- else }}
+        - repoURL: https://github.com/NyEstevo/fiap-tech-challenges.git
+          targetRevision: lab
+          path: '{{ .path }}'
+      {{- end }}
+
+  syncPolicy:
+    # Deletar o ApplicationSet nao derruba a stack ja instalada.
+    preserveResourcesOnDeletion: true

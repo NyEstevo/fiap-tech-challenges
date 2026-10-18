@@ -37,9 +37,14 @@ locals {
   dynamodb_owner = one([for s in local.services : s.name if s.dynamodb.enabled])
 
   ingress_nginx_values_path = "${path.module}/../../../../../fase-2/ingress-nginx-values.yaml"
-  # Manifesto de bootstrap do GitOps: o ApplicationSet `toggle-master` que
-  # gera/adota as 7 Applications (substituiu a root-app app-of-apps).
-  gitops_root_app_path = "${path.module}/../../../../gitops/applicationset.yaml"
+  # Manifestos de bootstrap do GitOps, aplicados em ordem:
+  #   - fase-3: ApplicationSet `toggle-master` que gera/adota as 7
+  #     Applications (substituiu a root-app app-of-apps);
+  #   - fase-4: ApplicationSet `observability` (stack de monitoramento).
+  gitops_root_app_paths = [
+    "${path.module}/../../../../gitops/applicationset.yaml",
+    "${path.module}/../../../../../fase-4/gitops/applicationset.yaml",
+  ]
 }
 
 ########################################################################
@@ -291,7 +296,7 @@ resource "null_resource" "root_app" {
   triggers = {
     cluster      = var.cluster_name
     region       = var.region
-    manifest_sha = filesha256(local.gitops_root_app_path)
+    manifest_sha = sha256(join(",", [for p in local.gitops_root_app_paths : filesha256(p)]))
   }
 
   provisioner "local-exec" {
@@ -302,7 +307,7 @@ resource "null_resource" "root_app" {
         kubectl get crd applicationsets.argoproj.io >/dev/null 2>&1 && break
         echo "aguardando CRD do ArgoCD ($i/30)..."; sleep 10
       done
-      kubectl apply -f ${local.gitops_root_app_path}
+      kubectl apply ${join(" ", [for p in local.gitops_root_app_paths : "-f ${p}"])}
     EOT
   }
 

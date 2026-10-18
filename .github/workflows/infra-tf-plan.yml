@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "fase-3/infra/terraform/**"
+      # ApplicationSets sao aplicados pelo null_resource.root_app (local-exec):
+      # editar so o manifesto tambem precisa re-aplicar.
+      - "fase-*/gitops/applicationset.yaml"
       - ".github/workflows/infra-tf-*.yml"
 
 permissions:

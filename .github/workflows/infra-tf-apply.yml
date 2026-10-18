@@ -5,6 +5,9 @@ on:
     branches: [ main, lab ]
     paths:
       - "fase-3/infra/terraform/**"
+      # ApplicationSets sao aplicados pelo null_resource.root_app (local-exec):
+      # editar so o manifesto tambem precisa re-aplicar.
+      - "fase-*/gitops/applicationset.yaml"
   workflow_dispatch:
     inputs:
       environment:
