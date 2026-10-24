@@ -102,6 +102,52 @@ func (a *App) createKeyHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// chaosHandler gerencia o estado da injeção de falha.
+// GET /admin/chaos: retorna o status atual
+// POST /admin/chaos: liga com taxa configurável via "error_rate_percent" (0-100, default 100)
+// DELETE /admin/chaos: desliga
+func (a *App) chaosHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		enabled, errorRate := a.Chaos.Status()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"enabled":            enabled,
+			"error_rate_percent": errorRate,
+			"message":            "Status do chaos injetado",
+		})
+
+	case http.MethodPost:
+		// Lê a taxa de erro do corpo (se não houver, usa 100)
+		var req struct {
+			ErrorRatePercent int `json:"error_rate_percent"`
+		}
+		req.ErrorRatePercent = 100 // Default
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		a.Chaos.Enable(req.ErrorRatePercent)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"enabled":            true,
+			"error_rate_percent": req.ErrorRatePercent,
+			"message":            "Chaos injetado ligado",
+		})
+
+	case http.MethodDelete:
+		a.Chaos.Disable()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"enabled": false,
+			"message": "Chaos injetado desligado",
+		})
+
+	default:
+		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
+	}
+}
+
 // --- Middleware ---
 
 // masterKeyAuthMiddleware protege endpoints que só podem ser acessados com a MASTER_KEY

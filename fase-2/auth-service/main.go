@@ -23,6 +23,7 @@ import (
 type App struct {
 	DB        *sql.DB
 	MasterKey string
+	Chaos     *ChaosInjector
 }
 
 func main() {
@@ -64,7 +65,11 @@ func main() {
 	app := &App{
 		DB:        db,
 		MasterKey: masterKey,
+		Chaos:     NewChaosInjector(),
 	}
+
+	// Armazena o App globalmente para acesso pelo middleware de instrumentation
+	globalApp = app
 
 	// --- Rotas da API ---
 	mux := http.NewServeMux()
@@ -76,6 +81,11 @@ func main() {
 	// Endpoints de "admin" para criar/gerenciar chaves
 	// Eles são protegidos pelo middleware de autenticação
 	mux.Handle("/admin/keys", app.masterKeyAuthMiddleware(http.HandlerFunc(app.createKeyHandler)))
+
+	// Rota de chaos injection (desligada por padrão, ativa apenas com CHAOS_ENABLED=true)
+	if os.Getenv("CHAOS_ENABLED") == "true" {
+		mux.Handle("/admin/chaos", app.masterKeyAuthMiddleware(http.HandlerFunc(app.chaosHandler)))
+	}
 
 	srv := &http.Server{Addr: ":" + port, Handler: instrumentHandler(mux)}
 	go func() {

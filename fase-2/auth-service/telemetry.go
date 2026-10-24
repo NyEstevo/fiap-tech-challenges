@@ -86,8 +86,33 @@ func setupTelemetry(ctx context.Context) (func(context.Context) error, error) {
 // /health fica de fora: as probes do Kubernetes rodam a cada poucos segundos
 // e sempre respondem 200 -- diluiriam a taxa de erro do alerta de 5xx e
 // encheriam o APM de traces sem valor.
+//
+// O middleware de chaos injection é aplicado ANTES do otelhttp.NewHandler,
+// para que os erros injetados sejam contabilizados nas métricas e nos traces.
+// /health é excluído do chaos: continua respondendo 200 mesmo quando o chaos está ligado,
+// reproduzindo a "falha silenciosa" do enunciado.
 func instrumentHandler(h http.Handler) http.Handler {
-	return otelhttp.NewHandler(h, "http.server",
+	// Cria o handler de chaos (será aplicado dentro do otelhttp)
+	chaosHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// /health e /admin/chaos nunca falham
+		if r.URL.Path == "/health" || r.URL.Path == "/admin/chaos" {
+			h.ServeHTTP(w, r)
+			return
+		}
+
+		// Checa se o chaos está ligado e se deve falhar
+		if getAppFromContext(r.Context()).Chaos.ShouldFail() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"erro":"injeção de falha do chaos","mensagem":"este erro foi propositalmente injetado para demonstrar o sistema de alerta e self-healing"}`))
+			log.Printf("Chaos: erro injetado em %s %s", r.Method, r.URL.Path)
+			return
+		}
+
+		h.ServeHTTP(w, r)
+	})
+
+	return otelhttp.NewHandler(chaosHandler, "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool { return r.URL.Path != "/health" }),
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 			// Os servicos so tem rotas fixas (sem IDs no path): o path cabe
@@ -96,3 +121,17 @@ func instrumentHandler(h http.Handler) http.Handler {
 		}),
 	)
 }
+
+// getAppFromContext recupera o App do contexto da requisição.
+// Isso é uma solução temporary para acessar o ChaosInjector sem passar como parâmetro.
+// Em produção, seria melhor usar um tipo de contexto específico.
+func getAppFromContext(ctx context.Context) *App {
+	// Isso é um hack: precisamos acessar o ChaosInjector do App.
+	// Como o instrumentation happen antes de passar para os handlers da mux,
+	// usamos uma variável global (não é ótimo, mas é funcional).
+	return globalApp
+}
+
+// globalApp é usada pela instrumentação para acessar o ChaosInjector.
+// Definida no main() após criar o App.
+var globalApp *App

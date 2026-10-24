@@ -20,6 +20,10 @@ components:
 
 namespace: toggle
 
+# Patch para adicionar CHAOS_ENABLED=true (fatia 11: injeção de falha para demo)
+patchesStrategicMerge:
+- configmap-patch.yaml
+
 # 1 replica por servico (lab: teto de pods baixo)
 replicas:
 - count: 1
