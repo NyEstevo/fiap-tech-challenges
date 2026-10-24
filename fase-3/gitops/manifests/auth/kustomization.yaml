@@ -20,9 +20,10 @@ components:
 
 namespace: toggle
 
-# Patch para adicionar CHAOS_ENABLED=true (fatia 11: injeção de falha para demo)
-patchesStrategicMerge:
-- configmap-patch.yaml
+# Fase-4 (fatia 11): liga a rota /admin/chaos (protegida pela MASTER_KEY)
+# usada na "prova real" do alerta + self-healing. Ver fase-2/auth-service/chaos.go.
+patches:
+- path: configmap-patch.yaml
 
 # 1 replica por servico (lab: teto de pods baixo)
 replicas:

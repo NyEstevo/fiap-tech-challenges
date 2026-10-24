@@ -68,9 +68,6 @@ func main() {
 		Chaos:     NewChaosInjector(),
 	}
 
-	// Armazena o App globalmente para acesso pelo middleware de instrumentation
-	globalApp = app
-
 	// --- Rotas da API ---
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", app.healthHandler)
@@ -82,12 +79,14 @@ func main() {
 	// Eles são protegidos pelo middleware de autenticação
 	mux.Handle("/admin/keys", app.masterKeyAuthMiddleware(http.HandlerFunc(app.createKeyHandler)))
 
-	// Rota de chaos injection (desligada por padrão, ativa apenas com CHAOS_ENABLED=true)
+	// Injecao de falha da fase-4 (chaos.go): so existe com CHAOS_ENABLED=true.
+	var handler http.Handler = mux
 	if os.Getenv("CHAOS_ENABLED") == "true" {
 		mux.Handle("/admin/chaos", app.masterKeyAuthMiddleware(http.HandlerFunc(app.chaosHandler)))
+		handler = app.Chaos.Middleware(mux)
 	}
 
-	srv := &http.Server{Addr: ":" + port, Handler: instrumentHandler(mux)}
+	srv := &http.Server{Addr: ":" + port, Handler: instrumentHandler(handler)}
 	go func() {
 		log.Printf("Serviço de Autenticação (Go) rodando na porta %s", port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

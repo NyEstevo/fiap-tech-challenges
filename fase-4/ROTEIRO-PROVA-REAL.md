@@ -1,275 +1,83 @@
-# Roteiro: Prova Real do Alerta e Self-Healing
+# Roteiro da "Prova Real": falha → alerta → incidente → self-healing
 
-Este roteiro documenta o passo a passo para demonstrar o ciclo completo de **detecção de falha, alerta, notificação e self-healing automático** no ToggleMaster.
+Este é o roteiro do trecho do vídeo que prova o ciclo completo da Fase 4:
 
-## Contexto
+```
+auth começa a responder 500  (o /health continua 200: falha "silenciosa")
+  → métricas OTel mostram 5xx > 5% por 2 min       (Grafana: alerta Firing)
+  → PagerDuty abre incidente + Slack avisa          (contact point togglemaster-incidente)
+  → Grafana chama a GitHub Action self-healing.yml  (workflow_dispatch, ref lab)
+  → kubectl rollout restart do auth                 (pod novo, sem o estado de falha)
+  → 5xx volta a 0 → alerta Resolved → incidente fecha sozinho
+```
 
-O `auth-service` foi instrumentado com injeção de falha configurável (chaos injection). Quando ativado, o serviço passa a responder com **HTTP 500** em todas as rotas (exceto `/health` e `/admin/chaos`), simulando uma falha silenciosa:
+**Analogia:** é um teste de alarme de incêndio. Acendemos uma vela embaixo do sensor (chaos), e o alarme toca (Grafana). O alarme liga para os bombeiros (PagerDuty) e avisa no grupo do prédio (Slack), e o sprinkler automático (self-healing) apaga a vela. Ninguém precisa encostar em nada.
 
-- `/health` continua retornando **200 OK** (liveness probe não mata o pod)
-- `/validate` e `/admin/keys` retornam **500** com mensagem explicativa
-- A métrica `http.server.request.duration_seconds_count` com label `http_response_status_code=500` sobe
-- O alerta no Grafana dispara quando **5xx > 5%** por 5 minutos
+## Por que a falha é "honesta"
 
-## Pré-requisitos
+O chaos fica **só na memória** do processo do auth (`fase-2/auth-service/chaos.go`). Quando o self-healing reinicia o pod, o processo novo nasce sem o chaos, então o restart **cura de verdade**. Não é teatro.
 
-1. **Cluster lab rodando** com ArgoCD sincronizando a stack de observabilidade (Prometheus, Loki, Grafana)
-2. **OTel Collector** recebendo métricas do auth-service
-3. **AlertManager** ou **Grafana Alerting** configurado
-4. **PagerDuty/OpsGenie** integrado
-5. **Slack/Discord** conectado para notificações
-6. **GitHub Actions** configurado para self-healing
-7. Scripts em `fase-4/scripts/`:
-   - `gerar-trafego.sh` — gera requisições contínuas
-   - `prova-real.sh` — controla o chaos
+Os outros serviços não entram em cascata: o `flags` e o `targeting` transformam a falha do auth em **401** (chave não validada), que é erro do cliente e não conta no alerta de 5xx. Só o `auth` dispara.
 
-## Passo a Passo
+## Pré-requisitos (antes de gravar)
 
-### 1. Preparação: Abrir 3 terminais
+- [ ] PRs das fatias 7 a 11 mergeados e todas as Applications `Synced/Healthy` no ArgoCD.
+- [ ] Secret `tc-observability` no AWS Secrets Manager com as 5 chaves (ver README da fase-4).
+- [ ] Os secrets AWS do GitHub (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) atualizados **nesta** sessão do AWS Academy. Senão a Action não consegue falar com o EKS.
+- [ ] Teste prévio do self-healing: `gh workflow run self-healing.yml --ref lab -f service=auth` termina verde.
+- [ ] **Espere 10 min depois desse teste antes de gravar.** O cooldown do self-healing pula um restart feito há menos de 10 min.
+
+## Terminais
 
 ```bash
-# Terminal 1: Dashboard Grafana
-# Acesse http://<grafana-ip>:3000 (credenciais: admin/admin)
-# Abra o dashboard "Saúde do Ecossistema ToggleMaster"
-# Foque no painel "Taxa de erros HTTP 5xx por microsserviço"
+# T1 - Grafana (http://localhost:3000, usuário admin)
+kubectl -n observability get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; echo
+kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80
 
-# Terminal 2: Monitoramento de pods
-kubectl get pods -n toggle -w
+# T2 - pods do auth (mostra o pod sendo trocado)
+kubectl -n toggle get pods -l app=auth -w
 
-# Terminal 3: Comandos de tráfego e chaos
-cd fase-4/scripts
+# T3 - tráfego contínuo (via ingress; /validate=401 normal, 500 com chaos)
+fase-4/scripts/gerar-trafego.sh
+
+# T4 - controle do chaos
+fase-4/scripts/prova-real.sh status
 ```
 
-### 2. Gerar tráfego contínuo
+Abas do navegador: dashboard **Saúde do Ecossistema ToggleMaster**, **Alerting → Alert rules** (pasta ToggleMaster), PagerDuty (Incidents), canal do Slack, **GitHub → Actions → self-healing** e Datadog **APM → Service Map**.
 
-**No Terminal 3:**
+## Passo a passo (≈ 6 a 8 min de vídeo)
+
+| Tempo | Ação | O que mostrar |
+|---|---|---|
+| 0:00 | T3 rodando há pelo menos 1 min | dashboard com auth em 0% de 5xx; Service Map do Datadog com os 5 serviços |
+| 0:30 | `fase-4/scripts/prova-real.sh on` | T3 passa a mostrar `/validate=500` e `/health=200` ("o Kubernetes acha que está tudo bem") |
+| 1:00 | | painel "Taxa de erros 5xx" sobe para ~100% no auth; alerta em **Pending** |
+| ~2:30 | | alerta **Firing** (2 min sustentado + avaliação a cada 30s) |
+| ~2:45 | | incidente aberto no PagerDuty; mensagem "ALERTA: auth-service" no Slack com runbook e dashboard |
+| ~3:00 | | GitHub Actions: execução `self-healing` em andamento (motivo = nome do alerta) |
+| ~4:00 | | T2: pod antigo `Terminating`, pod novo `Running`; Slack: "auth-service reiniciado" |
+| ~4:00 | | T3 volta a `/validate=401`; `prova-real.sh status` mostra `"enabled": false` |
+| ~6:00 | | painel de 5xx desce (janela de 2 min); alerta **Resolved**; incidente **Resolved** no PagerDuty; Slack "RESOLVIDO" |
+
+Extra para o APM: no Datadog, filtre `service:auth-service status:error` e abra um trace do período do chaos. Mostre também o log do mesmo `trace_id` no Loki (Grafana → Explore → Loki).
+
+## Se algo não acontecer
+
+| Sintoma | Onde olhar |
+|---|---|
+| `prova-real.sh` responde 404 | O pod ainda é anterior ao merge da fatia 11. Confira se `kubectl -n toggle exec deploy/auth-deployment -- env \| grep CHAOS` mostra `true`; o ConfigMap não reinicia o pod sozinho, então faça `kubectl -n toggle rollout restart deploy/auth-deployment`. |
+| Alerta não sai de Normal | Precisa haver tráfego (> 0,1 req/s): o T3 está rodando? No Grafana → Explore, rode a query do alerta (está na regra). |
+| Firing, mas sem PagerDuty/Slack | O Grafana subiu antes do secret existir: `kubectl -n observability rollout restart deploy/kube-prometheus-stack-grafana`. |
+| Action não dispara | Grafana → Alerting → Contact points → `togglemaster-incidente` → erro do webhook. 401/403 = token sem a permissão *Actions: write*. |
+| Action falha no passo AWS | Credenciais do AWS Academy expiradas: atualize os 3 secrets do GitHub juntos. |
+| Action diz "cooldown" | Houve restart há menos de 10 min. É a trava contra loop funcionando; espere ou mostre isso como evidência. |
+
+Plano B (sem esperar o alerta): `gh workflow run self-healing.yml --ref lab -f service=auth -f motivo=demo` mostra a mesma cura.
+
+## Limpeza
 
 ```bash
-./gerar-trafego.sh http://<ingress-ip>
+fase-4/scripts/prova-real.sh off   # se o self-healing não rodou
+# Ctrl+C no T3
 ```
-
-Aguarde 30-60 segundos para estabilizar o tráfego. Você deve ver:
-- Muitas requisições GET `/health` e `/validate` com **200** ou **401** (chave inválida)
-- Taxa de requisições constante (RPS)
-- Taxa de erro inicial próxima a **0%**
-
-### 3. Ligar o chaos
-
-**No Terminal 3 (novo processo):**
-
-```bash
-./prova-real.sh on 100
-```
-
-Saída esperada:
-```
-[OK] Endpoint: http://<ingress-ip>
-[OK] MASTER_KEY obtida
-[INFO] Ligando chaos com taxa de erro: 100%
-{
-  "enabled": true,
-  "error_rate_percent": 100,
-  "message": "Chaos injetado ligado"
-}
-[OK] Chaos ligado!
-```
-
-### 4. Observar o impacto (2-3 minutos)
-
-**Terminal 1 (Grafana):**
-- Painel de **taxa de erros 5xx**: sobe de ~0% para **~100%** (exceto `/health`)
-- Painel de **réplicas**: observe se o HPA começa a escalar (consome mais recursos)
-- Painel de **logs**: filtre por `erro` ou `falha injetada` para ver as mensagens
-
-**Terminal 2 (pods):**
-```
-auth-service-deployment-xxxx   1/1     Running   0          5m
-flags-service-deployment-yyyy  1/1     Running   0          5m
-targeting-service-deploy-zzzz  1/1     Running   0          5m
-evaluation-service-dep-wwww    1/1     Running   0          5m
-```
-
-Note que o `auth-service` continua com status **Running** (liveness probe passa).
-
-**Terminal 3 (tráfego):**
-```
-[16:45:23] 200 GET /health (total: 45, ok: 23, erro: 22)
-[16:45:24] 500 GET /validate (total: 46, ok: 23, erro: 23)
-[16:45:25] 500 GET /validate (total: 47, ok: 23, erro: 24)
-...
-```
-
-A taxa de erro sobe para **~50%** (alternando /health e /validate).
-
-### 5. Alerta disparando
-
-**Após 5 minutos:**
-
-Grafana Alerting / AlertManager status muda de **"Inactive"** para **"Firing"** para o alerta `AuthServiceHighErrorRate`.
-
-**Webhook dispara:**
-- PagerDuty/OpsGenie: novo incidente criado (severidade Critical/High)
-- Slack/Discord: mensagem detalhada com link para o dashboard e runbook
-
-### 6. Self-Healing executando (automático)
-
-Assim que o alerta entra em **Firing**, o webhook dispara um GitHub Actions workflow parametrizado:
-
-```yaml
-name: Self-Healing
-on:
-  repository_dispatch:
-    types: [service-alert]
-
-jobs:
-  restart-service:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: aws-auth
-      - run: |
-          SERVICE_NAME=${{ github.event.client_payload.service }}
-          kubectl rollout restart deployment/${SERVICE_NAME}-deployment -n toggle
-          kubectl rollout status deployment/${SERVICE_NAME}-deployment -n toggle
-```
-
-**Terminal 2 (pods):**
-
-O `auth-service-deployment` entra em **1/0 (terminating)**, depois volta a **1/1 (Running)** após ~30 segundos.
-
-```
-auth-service-deployment-old    0/1     Terminating   0          10m
-auth-service-deployment-new    1/1     Running       0          5s
-```
-
-**Terminal 3 (tráfego):**
-
-Após o restart, o chaos em memória é perdido. As requisições voltam a:
-- `/health`: **200** (sempre)
-- `/validate`: **401** ou **200** (depende da API key)
-
-```
-[16:51:30] 200 GET /health (total: 380, ok: 190, erro: 190)
-[16:51:31] 200 GET /validate (total: 381, ok: 190, erro: 191)
-[16:51:32] 200 GET /health (total: 382, ok: 191, erro: 191)
-[16:51:33] 200 GET /validate (total: 383, ok: 192, erro: 191)  <- Erros param de crescer
-```
-
-### 7. Taxa de erro volta a 0%
-
-**Terminal 1 (Grafana):**
-
-Painel de **taxa de erros 5xx** desce de **100%** para **0%** (em tempo real).
-
-Alerta status muda de **"Firing"** para **"Resolved"** após 5 minutos de taxa normal.
-
-**Incidente no PagerDuty/OpsGenie:** status muda para **Resolved** ou **Acknowledged + Auto-resolved**.
-
-**Notificação no Slack/Discord:** mensagem de resolução.
-
-### 8. Desligar o chaos (opcional, para novo teste)
-
-```bash
-./prova-real.sh off
-./prova-real.sh status
-```
-
-## Efeito em Cascata
-
-### Observação
-
-Se o `auth-service` está retornando 500 em `/validate`, os serviços que chamam essa rota também falham:
-
-- **flags-service** → chama `auth-service` GET `/validate` para autenticar → **500 erro de upstream**
-- **targeting-service** → chama `auth-service` GET `/validate` para autenticar → **500 erro de upstream**
-- **evaluation-service** → chama `flags-service` e `targeting-service` → **500 erro de upstream**
-
-Portanto, **todos os 5 serviços podem ver aumento de 5xx**, não apenas o `auth-service`.
-
-### Alertas que disparam
-
-1. **"AuthServiceHighErrorRate"** (primário)
-   - Condição: `http_server_request_duration_seconds_count{http_response_status_code="500", service="auth"} / total > 5%`
-   - Webhook dispara restart do `auth-service`
-
-2. **"FlagsServiceHighErrorRate"** (cascata)
-   - Condição: `http_server_request_duration_seconds_count{http_response_status_code="500", service="flags"} / total > 5%`
-   - Webhook dispara restart do `flags-service`
-   - **MAS** isso não resolve o problema original (erro vem do `auth`)
-
-3. **Idem para `targeting-service` e `evaluation-service`**
-
-### Resolução esperada
-
-Apenas o restart do `auth-service` resolve o problema (cura a "raiz"):
-
-1. Mesmo que flags/targeting/evaluation também disparem, seus alertas só resolvem se **auth ficar saudável primeiro**
-2. Após restart do auth:
-   - auth volta a 200 em /validate
-   - flags/targeting/evaluation param de receber 500 (podem ainda dar erro por outra razão, mas não por auth)
-   - Seus alertas ficam pendentes ou também resolvem se a causa foi só auth
-
-Isso é **aceitável e documentado** neste roteiro.
-
-## Checklist para o Vídeo
-
-- [ ] Cluster EKS e ArgoCD visíveis (Applications em Synced/Healthy)
-- [ ] Dashboard Grafana aberto, painel de 5xx visível
-- [ ] Terminal com `kubectl get pods -w` aberto
-- [ ] Tráfego começando (`gerar-trafego.sh` rodando)
-- [ ] Taxa de erro ~0% antes do chaos
-- [ ] Chaos ligado (`./prova-real.sh on 100`)
-- [ ] Taxa de erro sobe para ~100% (no painel 5xx)
-- [ ] Alerta passa para "Firing" (status ou notificação visível)
-- [ ] Incidente criado no PagerDuty/OpsGenie (screenshot ou print)
-- [ ] Notificação chegando no Slack/Discord
-- [ ] GitHub Actions rodando (log de self-healing)
-- [ ] Pod do auth-service reiniciando (Terminal 2)
-- [ ] Taxa de erro voltando a 0%
-- [ ] Alerta "Resolved"
-- [ ] Incidente fechado no PagerDuty/OpsGenie
-
-## Notas de Execução
-
-### Timing
-
-- **Geração de tráfego**: deixe rodando continuamente
-- **Aguardando avaliação do alerta**: 5-10 minutos (depende da janela de avaliação configurada)
-- **Restart do pod**: ~30 segundos
-- **Resolução do alerta**: mais 5 minutos após volta ao normal
-
-**Tempo total esperado: 15-25 minutos**
-
-### Troubleshooting
-
-**O chaos não liga:**
-```bash
-# Verifica se a rota existe (CHAOS_ENABLED=true)
-kubectl get configmap auth-configmap -n toggle -o jsonpath='{.data.CHAOS_ENABLED}'
-```
-
-**O pod não reinicia:**
-```bash
-# Verifica logs do GitHub Actions (se houver webhook)
-gh run list --repo NyEstevo/fiap-tech-challenges
-
-# Manual fallback:
-kubectl rollout restart deployment/auth-service-deployment -n toggle
-```
-
-**Alerta não dispara:**
-```bash
-# Verifica Prometheus:
-kubectl port-forward -n toggle svc/prometheus 9090:9090
-# Abra http://localhost:9090/graph
-# Query: http_server_request_duration_seconds_count{http_response_status_code="500", service="auth"}
-```
-
-### Limpeza
-
-Sempre desligar o chaos ao terminar:
-
-```bash
-./prova-real.sh off
-```
-
-Assim, o cluster volta ao estado limpo para o próximo teste ou apresentação.

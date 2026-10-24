@@ -1,72 +1,34 @@
-#!/bin/bash
-# gerar-trafego.sh: gera tráfego contínuo e realista no sistema ToggleMaster
-# para demonstrar o efeito do chaos injection e do alerta de 5xx.
+#!/usr/bin/env bash
+# gerar-trafego.sh -- trafego continuo no auth-service para a "prova real".
 #
-# Uso: ./gerar-trafego.sh [endpoint] [intervalo_segundos]
-# Exemplo: ./gerar-trafego.sh http://localhost:8080 1
-
+# Chama GET /validate com uma chave invalida: normalmente responde 401 (erro
+# do cliente, NAO conta no alerta de 5xx); com o chaos ligado responde 500.
+# Tambem chama /health, que segue 200 o tempo todo -- a "falha silenciosa".
+#
+# Uso:
+#   fase-4/scripts/gerar-trafego.sh              # via ingress do lab
+#   fase-4/scripts/gerar-trafego.sh http://localhost:18001   # outro endpoint
+# Intervalo entre chamadas: INTERVALO (segundos, padrao 0.5).
 set -euo pipefail
 
-ENDPOINT="${1:-http://localhost:8080}"
-INTERVAL="${2:-1}"
+INTERVALO="${INTERVALO:-0.5}"
+BASE="${1:-}"
+if [[ -z "$BASE" ]]; then
+  host=$(kubectl -n toggle get ingress ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+  [[ -n "$host" ]] || { echo "ingress sem hostname; passe o endpoint como argumento" >&2; exit 1; }
+  BASE="http://${host}/auth"
+fi
+echo "trafego em ${BASE} (Ctrl+C para parar)"
 
-# Cores para output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# De proposito NAO e uma chave valida: o normal e o auth responder 401.
+chave_falsa="nao-e-uma-chave"
 
-echo -e "${GREEN}[INFO]${NC} Iniciando geração de tráfego para $ENDPOINT (intervalo: ${INTERVAL}s)"
-echo -e "${YELLOW}[INFO]${NC} Pressione Ctrl+C para parar"
-
-# Verifica se o ingress está acessível (com retry)
-max_retries=5
-retry_count=0
-while ! curl -s "${ENDPOINT}/health" > /dev/null; do
-	retry_count=$((retry_count + 1))
-	if [ $retry_count -ge $max_retries ]; then
-		echo -e "${RED}[ERRO]${NC} Não foi possível acessar ${ENDPOINT}/health após $max_retries tentativas"
-		exit 1
-	fi
-	echo -e "${YELLOW}[INFO]${NC} Aguardando endpoint... (tentativa $retry_count/$max_retries)"
-	sleep 2
-done
-
-echo -e "${GREEN}[OK]${NC} Endpoint acessível"
-
-# Contador de requisições
-count=0
-success_count=0
-error_count=0
-
+total=0; erros5xx=0
 while true; do
-	count=$((count + 1))
-
-	# Alterna entre /validate (com API key) e /health (sem autenticação)
-	if [ $((count % 2)) -eq 1 ]; then
-		# GET /health (sem autenticação)
-		response=$(curl -s -w "\n%{http_code}" "${ENDPOINT}/health")
-		http_code=$(echo "$response" | tail -1)
-		method="GET /health"
-	else
-		# GET /validate com Bearer token (simulando requisição autenticada)
-		response=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer dummy-key" "${ENDPOINT}/validate")
-		http_code=$(echo "$response" | tail -1)
-		method="GET /validate"
-	fi
-
-	# Conta sucessos (2xx/3xx) e erros (4xx/5xx)
-	if [ "$http_code" -lt 400 ]; then
-		success_count=$((success_count + 1))
-		status_color="${GREEN}"
-	else
-		error_count=$((error_count + 1))
-		status_color="${RED}"
-	fi
-
-	# Output formatado
-	timestamp=$(date '+%H:%M:%S')
-	echo -e "[${timestamp}] ${status_color}${http_code}${NC} $method (total: $count, ok: $success_count, erro: $error_count)"
-
-	sleep "$INTERVAL"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${chave_falsa}" "${BASE}/validate" || echo 000)
+  health=$(curl -s -o /dev/null -w '%{http_code}' "${BASE}/health" || echo 000)
+  total=$((total + 1))
+  [[ "$code" == 5* ]] && erros5xx=$((erros5xx + 1))
+  printf '%s  /validate=%s  /health=%s  (5xx: %d de %d)\n' "$(date +%T)" "$code" "$health" "$erros5xx" "$total"
+  sleep "$INTERVALO"
 done

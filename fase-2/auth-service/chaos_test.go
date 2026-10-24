@@ -1,258 +1,124 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
-func TestChaosInjector_Disabled(t *testing.T) {
+func TestChaosInjector(t *testing.T) {
 	c := NewChaosInjector()
-
-	// Quando desligado, ShouldFail sempre retorna false
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if c.ShouldFail() {
-			t.Fatal("ChaosInjector desligado deveria sempre retornar false")
+			t.Fatal("desligado nunca deveria falhar")
 		}
 	}
-}
 
-func TestChaosInjector_Enable(t *testing.T) {
-	c := NewChaosInjector()
-
-	// Liga com 100% de taxa
-	c.Enable(100)
-
-	enabled, errorRate := c.Status()
-	if !enabled {
-		t.Fatal("ChaosInjector deveria estar ligado")
+	if !c.Enable(100) {
+		t.Fatal("Enable(100) deveria ser aceito")
 	}
-	if errorRate != 100 {
-		t.Fatalf("Taxa de erro esperada 100, got %d", errorRate)
-	}
-
-	// Quando ligado com 100%, ShouldFail sempre retorna true
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if !c.ShouldFail() {
-			t.Fatal("ChaosInjector com 100% deveria sempre retornar true")
+			t.Fatal("com 100% deveria sempre falhar")
 		}
+	}
+
+	c.Disable()
+	if enabled, _ := c.Status(); enabled || c.ShouldFail() {
+		t.Fatal("Disable deveria desligar")
+	}
+
+	for _, rate := range []int{-1, 101} {
+		if c.Enable(rate) {
+			t.Fatalf("taxa %d deveria ser recusada", rate)
+		}
+	}
+	if enabled, _ := c.Status(); enabled {
+		t.Fatal("taxa invalida nao pode ligar o chaos")
 	}
 }
 
 func TestChaosInjector_PartialRate(t *testing.T) {
 	c := NewChaosInjector()
-
-	// Liga com 50% de taxa, com seed determinística
-	rand.Seed(12345)
 	c.Enable(50)
-
-	// Com seed determinística, devemos ter aproximadamente 50% de falhas
-	failCount := 0
-	iterations := 1000
-	for i := 0; i < iterations; i++ {
+	fails := 0
+	for range 2000 {
 		if c.ShouldFail() {
-			failCount++
+			fails++
 		}
 	}
-
-	// Esperamos ~500 falhas (50%), com tolerância de ±100
-	if failCount < 400 || failCount > 600 {
-		t.Fatalf("Taxa de erro esperada ~50%%, got %d/%d (%.1f%%)", failCount, iterations, float64(failCount)*100/float64(iterations))
+	if fails < 800 || fails > 1200 {
+		t.Fatalf("esperado ~50%% de falhas, veio %d/2000", fails)
 	}
 }
 
-func TestChaosInjector_Disable(t *testing.T) {
+// Com o chaos ligado, rotas comuns dao 500, mas /health (probes do
+// Kubernetes) e /admin/chaos (para desligar) seguem respondendo.
+func TestChaosMiddleware(t *testing.T) {
 	c := NewChaosInjector()
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	h := c.Middleware(ok)
+
+	call := func(path string) int {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		return w.Code
+	}
+
+	if got := call("/validate"); got != http.StatusOK {
+		t.Fatalf("chaos desligado: /validate = %d, esperado 200", got)
+	}
 
 	c.Enable(100)
-	enabled, _ := c.Status()
-	if !enabled {
-		t.Fatal("ChaosInjector deveria estar ligado após Enable(100)")
+	cases := map[string]int{
+		"/validate":    http.StatusInternalServerError,
+		"/admin/keys":  http.StatusInternalServerError,
+		"/health":      http.StatusOK,
+		"/admin/chaos": http.StatusOK,
 	}
-
-	c.Disable()
-	enabled, _ = c.Status()
-	if enabled {
-		t.Fatal("ChaosInjector deveria estar desligado após Disable()")
-	}
-
-	// Após desligar, ShouldFail deve retornar false
-	for i := 0; i < 100; i++ {
-		if c.ShouldFail() {
-			t.Fatal("ChaosInjector desligado deveria sempre retornar false")
+	for path, want := range cases {
+		if got := call(path); got != want {
+			t.Errorf("chaos ligado: %s = %d, esperado %d", path, got, want)
 		}
 	}
 }
 
-func TestChaosHandler_GetStatus(t *testing.T) {
-	app := &App{
-		DB:        nil,
-		MasterKey: "test-master-key",
-		Chaos:     NewChaosInjector(),
+func TestChaosHandler(t *testing.T) {
+	app := &App{MasterKey: "mk", Chaos: NewChaosInjector()}
+	h := app.masterKeyAuthMiddleware(http.HandlerFunc(app.chaosHandler))
+
+	call := func(method, key, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, "/admin/chaos", strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+key)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
 	}
 
-	// Cria requisição GET
-	req := httptest.NewRequest("GET", "/admin/chaos", nil)
-	req.Header.Set("Authorization", "Bearer test-master-key")
-	w := httptest.NewRecorder()
-
-	app.chaosHandler(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("Status code esperado 200, got %d", w.Code)
+	if w := call(http.MethodPost, "errada", ""); w.Code != http.StatusForbidden {
+		t.Fatalf("sem MASTER_KEY: %d, esperado 403", w.Code)
+	}
+	if enabled, _ := app.Chaos.Status(); enabled {
+		t.Fatal("requisicao sem MASTER_KEY nao pode ligar o chaos")
 	}
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Erro ao decodificar resposta: %v", err)
+	if w := call(http.MethodPost, "mk", ""); w.Code != http.StatusOK {
+		t.Fatalf("POST sem corpo: %d", w.Code)
+	}
+	if enabled, rate := app.Chaos.Status(); !enabled || rate != 100 {
+		t.Fatalf("POST sem corpo deveria ligar com 100%%, veio %v/%d", enabled, rate)
 	}
 
-	if enabled, ok := resp["enabled"].(bool); !ok || enabled {
-		t.Fatal("chaos deveria estar desligado por padrão")
-	}
-}
-
-func TestChaosHandler_Enable(t *testing.T) {
-	app := &App{
-		DB:        nil,
-		MasterKey: "test-master-key",
-		Chaos:     NewChaosInjector(),
+	if w := call(http.MethodPost, "mk", `{"error_rate_percent": 30}`); !strings.Contains(w.Body.String(), `"error_rate_percent":30`) {
+		t.Fatalf("POST 30%%: corpo %s", w.Body.String())
 	}
 
-	// Cria requisição POST com taxa customizada
-	body := []byte(`{"error_rate_percent": 75}`)
-	req := httptest.NewRequest("POST", "/admin/chaos", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer test-master-key")
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	app.chaosHandler(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("Status code esperado 200, got %d", w.Code)
+	if w := call(http.MethodPost, "mk", `{"error_rate_percent": 150}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("taxa 150: %d, esperado 400", w.Code)
 	}
 
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Erro ao decodificar resposta: %v", err)
-	}
-
-	if enabled, ok := resp["enabled"].(bool); !ok || !enabled {
-		t.Fatal("chaos deveria estar ligado")
-	}
-
-	if rate, ok := resp["error_rate_percent"].(float64); !ok || rate != 75 {
-		t.Fatalf("Taxa de erro esperada 75, got %v", resp["error_rate_percent"])
-	}
-
-	// Verifica que o estado interno foi atualizado
-	isEnabled, errorRate := app.Chaos.Status()
-	if !isEnabled || errorRate != 75 {
-		t.Fatalf("Estado do chaos não foi atualizado corretamente: %v, %d", isEnabled, errorRate)
-	}
-}
-
-func TestChaosHandler_Disable(t *testing.T) {
-	app := &App{
-		DB:        nil,
-		MasterKey: "test-master-key",
-		Chaos:     NewChaosInjector(),
-	}
-
-	// Primeiro liga
-	app.Chaos.Enable(100)
-
-	// Depois desliga via DELETE
-	req := httptest.NewRequest("DELETE", "/admin/chaos", nil)
-	req.Header.Set("Authorization", "Bearer test-master-key")
-	w := httptest.NewRecorder()
-
-	app.chaosHandler(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("Status code esperado 200, got %d", w.Code)
-	}
-
-	// Verifica que o estado foi atualizado
-	isEnabled, _ := app.Chaos.Status()
-	if isEnabled {
-		t.Fatal("chaos deveria estar desligado após DELETE")
-	}
-}
-
-func TestChaosHandler_ForbiddenWithoutMasterKey(t *testing.T) {
-	app := &App{
-		DB:        nil,
-		MasterKey: "correct-master-key",
-		Chaos:     NewChaosInjector(),
-	}
-
-	tests := []string{"GET", "POST", "DELETE"}
-	for _, method := range tests {
-		t.Run(method, func(t *testing.T) {
-			req := httptest.NewRequest(method, "/admin/chaos", nil)
-			// Usa uma chave incorreta
-			req.Header.Set("Authorization", "Bearer wrong-key")
-			w := httptest.NewRecorder()
-
-			// Simula o middleware de autenticação
-			middleware := app.masterKeyAuthMiddleware(http.HandlerFunc(app.chaosHandler))
-			middleware.ServeHTTP(w, req)
-
-			if w.Code != http.StatusForbidden {
-				t.Fatalf("Status code esperado 403, got %d para método %s", w.Code, method)
-			}
-		})
-	}
-}
-
-func TestChaosHandler_InvalidErrorRate(t *testing.T) {
-	app := &App{
-		DB:        nil,
-		MasterKey: "test-master-key",
-		Chaos:     NewChaosInjector(),
-	}
-
-	tests := []int{-1, 101, 1000}
-	for _, rate := range tests {
-		t.Run("rate_"+string(rune(rate)), func(t *testing.T) {
-			body, _ := json.Marshal(map[string]int{"error_rate_percent": rate})
-			req := httptest.NewRequest("POST", "/admin/chaos", bytes.NewReader(body))
-			req.Header.Set("Authorization", "Bearer test-master-key")
-			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-
-			app.chaosHandler(w, req)
-
-			// A taxa inválida é rejeitada, chaos permanece desligado
-			isEnabled, _ := app.Chaos.Status()
-			if isEnabled {
-				t.Fatalf("chaos deveria estar desligado com taxa inválida %d", rate)
-			}
-		})
-	}
-}
-
-func TestChaosHandler_DefaultErrorRate(t *testing.T) {
-	app := &App{
-		DB:        nil,
-		MasterKey: "test-master-key",
-		Chaos:     NewChaosInjector(),
-	}
-
-	// POST sem especificar error_rate_percent
-	req := httptest.NewRequest("POST", "/admin/chaos", bytes.NewReader([]byte("{}")))
-	req.Header.Set("Authorization", "Bearer test-master-key")
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	app.chaosHandler(w, req)
-
-	_, errorRate := app.Chaos.Status()
-	if errorRate != 100 {
-		t.Fatalf("Taxa de erro esperada 100 (default), got %d", errorRate)
+	if w := call(http.MethodDelete, "mk", ""); !strings.Contains(w.Body.String(), `"enabled":false`) {
+		t.Fatalf("DELETE: corpo %s", w.Body.String())
 	}
 }
