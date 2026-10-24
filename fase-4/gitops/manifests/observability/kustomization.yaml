@@ -7,6 +7,7 @@ kind: Kustomization
 resources:
 - namespace.yaml
 - grafana-admin.yaml
+- datadog-keys.yaml
 
 # Dashboards como codigo. O sidecar do Grafana (kube-prometheus-stack) carrega
 # todo ConfigMap com o label grafana_dashboard: "1", de qualquer namespace.

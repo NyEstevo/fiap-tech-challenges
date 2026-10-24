@@ -7,13 +7,33 @@
 #
 #   metricas  -> Prometheus  (receptor OTLP nativo, /api/v1/otlp)
 #   logs      -> Loki        (receptor OTLP nativo, /otlp)
-#   traces    -> debug por enquanto; Datadog na fatia 7
+#   traces    -> Datadog APM (exporter datadog; connector datadog gera metricas)
 #
 # DaemonSet (1 pod por no): le os logs de todos os containers do no direto
 # de /var/log/pods (`filelog`, substitui o Promtail descontinuado) e recebe
 # OTLP pela hostPort -- os servicos apontam para o IP do proprio no
 # (status.hostIP), sem atravessar a rede para outro no.
 mode: daemonset
+
+# DD_API_KEY e DD_SITE vem do Secret "datadog-keys" (ExternalSecret em
+# manifests/observability/datadog-keys.yaml). optional + valor padrao na config
+# (${env:DD_API_KEY:-sem-chave}): sem o secret no Secrets Manager o Collector
+# SOBE do mesmo jeito -- so o envio ao Datadog falha (erro no log), e metricas
+# e logs para Prometheus/Loki seguem funcionando. Sem isso, faltar a chave
+# derrubaria a observabilidade inteira.
+extraEnvs:
+  - name: DD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: datadog-keys
+        key: DD_API_KEY
+        optional: true
+  - name: DD_SITE
+    valueFrom:
+      secretKeyRef:
+        name: datadog-keys
+        key: DD_SITE
+        optional: true
 
 # contrib: traz os componentes que o core nao tem (k8sattributes, filelog e,
 # na fatia 7, o exporter/connector do Datadog).
@@ -73,12 +93,24 @@ config:
       endpoint: http://loki.observability.svc.cluster.local:3100/otlp
       tls:
         insecure: true
-    # Traces ainda sem backend (Datadog chega na fatia 7). Amostra pouca coisa
-    # no log do proprio Collector so para provar que estao chegando.
-    debug:
-      verbosity: basic
-      sampling_initial: 5
-      sampling_thereafter: 200
+    # Datadog APM (sem Datadog Agent): recebe os traces e as estatisticas de
+    # APM calculadas pelo connector abaixo. service.name vira o "service" e
+    # deployment.environment (processor resource) vira o "env:lab".
+    datadog:
+      api:
+        key: ${env:DD_API_KEY:-sem-chave}
+        site: ${env:DD_SITE:-datadoghq.com}
+      host_metadata:
+        tags:
+          - env:lab
+
+  # Connector datadog: le os traces (ponta de saida do pipeline traces) e
+  # calcula hits, erros e latencia por servico/recurso -- as "APM stats" que
+  # desenham a Service Page e o Service Map. Elas saem como metricas em um
+  # pipeline proprio que vai SO para o Datadog (sao especificas dele; no
+  # Prometheus seriam lixo).
+  connectors:
+    datadog/connector: {}
 
   service:
     pipelines:
@@ -92,10 +124,16 @@ config:
         receivers: [otlp, filelog]
         processors: [memory_limiter, k8sattributes, resource, batch]
         exporters: [otlphttp/loki]
+      # Traces: vao ao Datadog e, em paralelo, ao connector que calcula as
+      # APM stats; estas voltam como metricas no pipeline metrics/datadog.
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [debug]
+        exporters: [datadog, datadog/connector]
+      metrics/datadog:
+        receivers: [datadog/connector]
+        processors: [memory_limiter, batch]
+        exporters: [datadog]
 
 # memory_limiter usa limit_percentage (80% do limit abaixo); GOMEMLIMIT
 # (useGOMEMLIMIT, default true) acompanha o mesmo limit.
