@@ -29,7 +29,12 @@ if not DATABASE_URL or not AUTH_SERVICE_URL:
 
 # --- Pool de Conexão com o Banco ---
 try:
-    pool = SimpleConnectionPool(1, 5, dsn=DATABASE_URL)
+    # RealDictCursor como padrao da CONEXAO (e nao por chamada de cursor()):
+    # a instrumentacao OTel do psycopg2 envolve o cursor_factory da conexao;
+    # um cursor_factory passado em cursor() o substituiria e as queries
+    # sumiriam do trace. Os cursor() que so fazem DELETE/rowcount nao leem
+    # linhas, entao o tipo de linha nao muda nada para eles.
+    pool = SimpleConnectionPool(1, 5, dsn=DATABASE_URL, cursor_factory=RealDictCursor)
     log.info("Pool de conexões com o PostgreSQL (targeting) inicializado.")
 except psycopg2.OperationalError as e:
     log.critical(f"Erro fatal ao conectar ao PostgreSQL: {e}")
@@ -94,7 +99,7 @@ def create_rule():
     cur = None
     try:
         conn = pool.getconn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur = conn.cursor()
         cur.execute(
             "INSERT INTO targeting_rules (flag_name, is_enabled, rules, created_at, updated_at) "
             "VALUES (%s, %s, %s, NOW(), NOW()) RETURNING *",
@@ -129,7 +134,7 @@ def get_rule(flag_name):
     cur = None
     try:
         conn = pool.getconn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur = conn.cursor()
         cur.execute("SELECT * FROM targeting_rules WHERE flag_name = %s", (flag_name,))
         rule = cur.fetchone()
         if not rule:
@@ -174,7 +179,7 @@ def update_rule(flag_name):
     cur = None
     try:
         conn = pool.getconn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur = conn.cursor()
         cur.execute(query, tuple(values))
 
         if cur.rowcount == 0:

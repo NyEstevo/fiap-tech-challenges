@@ -11,6 +11,10 @@ resources:
 - externalsecret.yaml
 - migrate
 
+# Variaveis padrao do OpenTelemetry (fase-4), iguais nos 5 servicos.
+components:
+- ../../../components/otel
+
 namespace: toggle
 
 # 1 replica por servico (lab: teto de pods baixo)

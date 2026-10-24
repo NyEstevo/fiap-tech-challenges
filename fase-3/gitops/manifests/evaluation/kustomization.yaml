@@ -12,6 +12,10 @@ resources:
 - ../../../evaluation/k8s/base
 - externalsecret.yaml
 
+# Variaveis padrao do OpenTelemetry (fase-4), iguais nos 5 servicos.
+components:
+- ../../../components/otel
+
 namespace: toggle
 
 # 1 replica; HPA 1..3.

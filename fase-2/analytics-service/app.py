@@ -10,6 +10,9 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from dotenv import load_dotenv
 from flask import Flask, jsonify
+from opentelemetry import propagate, trace
+from opentelemetry.instrumentation.utils import suppress_instrumentation
+from opentelemetry.trace import SpanKind
 
 # Configura o logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -47,8 +50,41 @@ except Exception as e:
 
 # --- SQS Worker ---
 
+# Sem SDK configurado (testes, compose local) o tracer e no-op.
+tracer = trace.get_tracer(__name__)
+SQS_QUEUE_NAME = SQS_QUEUE_URL.rsplit("/", 1)[-1]
+
+
+def trace_context(message):
+    """Contexto W3C (traceparent) que o produtor gravou nos MessageAttributes.
+
+    SQS nao e HTTP: o trace do evaluation-service so continua aqui se o
+    produtor injetar o `traceparent` como atributo da mensagem.
+    """
+    carrier = {
+        name: attr.get("StringValue", "")
+        for name, attr in message.get("MessageAttributes", {}).items()
+    }
+    return propagate.extract(carrier)
+
 
 def process_message(message):
+    """Processa a mensagem dentro de um span CONSUMER filho do trace do produtor."""
+    with tracer.start_as_current_span(
+        f"process {SQS_QUEUE_NAME}",
+        context=trace_context(message),
+        kind=SpanKind.CONSUMER,
+        attributes={
+            "messaging.system": "aws_sqs",
+            "messaging.operation.type": "process",
+            "messaging.destination.name": SQS_QUEUE_NAME,
+            "messaging.message.id": message["MessageId"],
+        },
+    ):
+        _process_message(message)
+
+
+def _process_message(message):
     """Processa uma única mensagem SQS e a insere no DynamoDB"""
     try:
         log.info(f"Processando mensagem ID: {message['MessageId']}")
@@ -90,12 +126,16 @@ def sqs_worker_loop():
     log.info("Iniciando o worker SQS...")
     while True:
         try:
-            # Long-polling: espera até 20s por mensagens
-            response = sqs_client.receive_message(
-                QueueUrl=SQS_QUEUE_URL,
-                MaxNumberOfMessages=10,  # Processa em lotes de até 10
-                WaitTimeSeconds=20,
-            )
+            # Long-polling: espera até 20s por mensagens. Sem span: a espera
+            # vazia viraria um trace sem sentido a cada 20s por worker.
+            with suppress_instrumentation():
+                response = sqs_client.receive_message(
+                    QueueUrl=SQS_QUEUE_URL,
+                    MaxNumberOfMessages=10,  # Processa em lotes de até 10
+                    WaitTimeSeconds=20,
+                    # traceparent do produtor vem como atributo da mensagem
+                    MessageAttributeNames=["All"],
+                )
 
             messages = response.get("Messages", [])
             if not messages:

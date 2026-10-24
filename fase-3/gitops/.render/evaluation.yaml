@@ -45,7 +45,32 @@ spec:
         app: evaluation
     spec:
       containers:
-        - envFrom:
+        - env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: APP_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['app']
+            - name: OTEL_SERVICE_NAME
+              value: $(APP_NAME)-service
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://$(HOST_IP):4318
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: http/protobuf
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=toggle-master,k8s.pod.ip=$(POD_IP)
+            - name: OTEL_METRIC_EXPORT_INTERVAL
+              value: "15000"
+            - name: OTEL_SEMCONV_STABILITY_OPT_IN
+              value: http
+          envFrom:
             - configMapRef:
                 name: evaluation-configmap
             - secretRef:
