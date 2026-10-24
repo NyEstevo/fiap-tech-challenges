@@ -1,0 +1,97 @@
+# ConfigMap com contact points para Grafana Unified Alerting
+# Os segredos (chaves de API, URLs de webhook) vêm do ExternalSecret como variáveis de ambiente
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-contact-points
+  namespace: observability
+data:
+  contact-points.yaml: |
+    contactPoints:
+      # PagerDuty: abre incidente automaticamente
+      - uid: pagerduty
+        name: PagerDuty
+        type: pagerduty
+        settings:
+          routingKey: $__env{PAGERDUTY_ROUTING_KEY}
+          severity: critical
+
+      # Slack: notificação detalhada com links
+      - uid: slack
+        name: Slack
+        type: slack
+        settings:
+          url: $__env{SLACK_WEBHOOK_URL}
+          title: "🚨 {{ .CommonLabels.alertname }}"
+          text: |
+            *Serviço:* {{ .CommonLabels.severity }}
+            *Descrição:* {{ .CommonAnnotations.description }}
+            *Resumo:* {{ .CommonAnnotations.summary }}
+
+            <{{ .CommonAnnotations.runbook_url }}|Runbook>
+
+      # Webhook customizado para disparar GitHub Action
+      - uid: github-self-healing
+        name: GitHub Self-Healing
+        type: webhook
+        settings:
+          url: "https://api.github.com/repos/NyEstevo/fiap-tech-challenges/dispatches"
+          httpMethod: POST
+          authorization_scheme: bearer
+          authorization_credentials: $__env{GITHUB_DISPATCH_TOKEN}
+          customData: |
+            {
+              "event_type": "self-healing",
+              "client_payload": {
+                "severity": "{{ .CommonLabels.severity }}",
+                "alert_name": "{{ .CommonLabels.alertname }}"
+              }
+            }
+
+  notification-policy.yaml: |
+    policy:
+      receiver: pagerduty
+      group_by:
+        - alertname
+        - severity
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 30m
+      routes:
+        - receiver: multi-channel
+          group_by:
+            - alertname
+            - severity
+          group_wait: 10s
+          group_interval: 10s
+          repeat_interval: 30m
+    receivers:
+      - name: pagerduty
+        pagerdutyConfigs:
+          - routingKey: $__env{PAGERDUTY_ROUTING_KEY}
+
+      - name: slack
+        slackConfigs:
+          - apiUrl: $__env{SLACK_WEBHOOK_URL}
+
+      - name: github-self-healing
+        webhookConfigs:
+          - url: "https://api.github.com/repos/NyEstevo/fiap-tech-challenges/dispatches"
+            sendResolved: false
+            httpSDConfigs:
+              - bearerToken: $__env{GITHUB_DISPATCH_TOKEN}
+            headers:
+              Accept: "application/vnd.github+json"
+
+      - name: multi-channel
+        pagerdutyConfigs:
+          - routingKey: $__env{PAGERDUTY_ROUTING_KEY}
+        slackConfigs:
+          - apiUrl: $__env{SLACK_WEBHOOK_URL}
+        webhookConfigs:
+          - url: "https://api.github.com/repos/NyEstevo/fiap-tech-challenges/dispatches"
+            sendResolved: false
+            httpSDConfigs:
+              - bearerToken: $__env{GITHUB_DISPATCH_TOKEN}
+            headers:
+              Accept: "application/vnd.github+json"

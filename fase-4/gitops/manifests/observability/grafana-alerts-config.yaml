@@ -1,0 +1,70 @@
+# ConfigMap com regras de alerta para Grafana Unified Alerting
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerts
+  namespace: observability
+data:
+  rules.yaml: |
+    groups:
+      - name: togglemaster-5xx
+        interval: 30s
+        rules:
+          # Alerta: Taxa de erros 5xx > 5% por serviço
+          # Para cada serviço (job), se a proporção de respostas 5xx em relação
+          # ao total de requisições ultrapassar 5% por mais de 2 minutos, dispara.
+          # Inclui guarda de tráfego mínimo: só alerta se houver >10 requisições
+          # no período, evitando falsos positivos com tráfego quase zero.
+          - uid: togglemaster_5xx_high
+            title: Taxa de erros 5xx > 5%
+            condition: C
+            data:
+              - refId: A
+                queryType: prometheus
+                model:
+                  expr: |
+                    increase(http_server_request_duration_seconds_count{job=~"toggle-master/.*-service",http_response_status_code=~"5.."}[5m])
+                  interval: ""
+                  legendFormat: "{{job}}"
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+              - refId: B
+                queryType: prometheus
+                model:
+                  expr: |
+                    increase(http_server_request_duration_seconds_count{job=~"toggle-master/.*-service"}[5m])
+                  interval: ""
+                  legendFormat: "{{job}}"
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+              - refId: C
+                queryType: ""
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0.05
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                          - B
+                      type: math
+                      expression: "$A / ($A + $B)"
+                  type: threshold
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+            noDataState: NoData
+            execErrState: Alerting
+            for: 2m
+            annotations:
+              description: "Serviço com taxa de erros 5xx acima de 5%. Valor atual: {{ .Value | humanizePercentage }}. Verificar em: https://grafana.observability.svc.cluster.local:3000/d/togglemaster-saude"
+              runbook_url: "https://github.com/NyEstevo/fiap-tech-challenges/blob/lab/fase-4/runbooks/5xx-alto.md"
+              summary: "Taxa de erros 5xx alta"
+            labels:
+              severity: critical

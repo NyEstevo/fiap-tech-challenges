@@ -111,6 +111,12 @@ grafana:
       access: proxy
       isDefault: false
 
+  # Variáveis de ambiente com segredos do ExternalSecret (tc-observability)
+  # para provisioning de alertas (Grafana Unified Alerting - fatia 9).
+  # As chaves PagerDuty, Slack e GitHub são interpoladas em templates de
+  # alerta e contact points via $__env{CHAVE}.
+  envFromSecret: tc-observability
+
   # Pod de `helm test` (hook=test): sem uso no GitOps, so ocuparia vaga.
   testFramework:
     enabled: false
@@ -118,6 +124,22 @@ grafana:
   resources:
     requests: { cpu: 100m, memory: 192Mi }
     limits: { memory: 384Mi }
+
+  # Volumes adicionais: monta ConfigMaps de alertas no diretório de provisioning
+  # do Grafana para que sejam carregados na inicialização.
+  extraVolumes:
+    - name: alerting-config
+      configMap:
+        name: grafana-alerts
+    - name: contact-points-config
+      configMap:
+        name: grafana-contact-points
+
+  extraVolumeMounts:
+    - name: alerting-config
+      mountPath: /etc/grafana/provisioning/alerting/rules
+    - name: contact-points-config
+      mountPath: /etc/grafana/provisioning/alerting/contact-points
 
 kube-state-metrics:
   resources:
