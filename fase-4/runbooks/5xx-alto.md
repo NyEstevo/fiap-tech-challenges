@@ -4,7 +4,7 @@
 
 Este alerta dispara quando a taxa de erros HTTP 5xx (Server Error) ultrapassa **5% do total de requisições** em um microsserviço do ToggleMaster, sustentado por mais de **2 minutos**.
 
-O alerta é baseado na métrica `http_server_request_duration_seconds_count` do OpenTelemetry, que registra todas as requisições HTTP (exceto `/health` e `/metrics`).
+O alerta é baseado na métrica `http_server_request_duration_seconds_count` do OpenTelemetry, que registra todas as requisições HTTP (exceto `/health`, que fica fora da instrumentação).
 
 ## Por Que Este Alerta Importa
 
@@ -15,7 +15,7 @@ O alerta é baseado na métrica `http_server_request_duration_seconds_count` do 
 ## Passos de Investigação
 
 ### 1. **Confirme o alerta no Grafana**
-   - Abra o dashboard `togglemaster-saude` em `https://grafana.observability.svc.cluster.local:3000/d/togglemaster-saude`.
+   - Abra o dashboard `togglemaster-saude` em `http://localhost:3000/d/togglemaster-saude` (com `kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80`).
    - Procure o painel de **"Taxa de erros 5xx por serviço"**.
    - Confirme qual serviço está acima de 5% e em qual horário começou.
 
@@ -23,7 +23,7 @@ O alerta é baseado na métrica `http_server_request_duration_seconds_count` do 
    ```bash
    # Acesse os logs centralizados no Loki (via Grafana)
    # Ou via kubectl:
-   kubectl -n toggle logs -l app=<svc>-deployment --tail=100 --since=5m
+   kubectl -n toggle logs -l app=<svc> --tail=100 --since=5m
    ```
    - Procure por stack traces de exceção, warnings ou erros.
    - Identifique a linha/função que está quebrando.
@@ -31,7 +31,7 @@ O alerta é baseado na métrica `http_server_request_duration_seconds_count` do 
 ### 3. **Verifique as dependências do serviço**
    - **Banco de dados**: está up? Há lock ou slow query?
      ```bash
-     kubectl -n toggle get pods -l app=<svc>-deployment
+     kubectl -n toggle get pods -l app=<svc>
      kubectl -n toggle describe pod <pod-name>
      ```
    - **Cache (Redis)**: se aplicável (evaluation-service), está respondendo?
@@ -46,7 +46,7 @@ O alerta é baseado na métrica `http_server_request_duration_seconds_count` do 
 ## Ações Imediatas
 
 ### Opção 1: Self-Healing Automático (padrão)
-O próprio sistema deveria ter disparado um webhook para o GitHub, que executa:
+O Grafana já chamou o workflow `self-healing.yml` (aba Actions do GitHub, branch `lab`), que executa:
 ```bash
 kubectl rollout restart deployment/<svc>-deployment -n toggle
 kubectl rollout status deployment/<svc>-deployment -n toggle
@@ -69,7 +69,9 @@ git push origin lab
 ```
 
 ### Opção 3: Scale out temporária
-Se for gargalo de CPU/memória:
+Se for gargalo de CPU/memória. Atenção: o ArgoCD está com `selfHeal`, então ele
+desfaz um `replicas` alterado à mão em poucos minutos; o ajuste permanente é
+no git (overlay do serviço em `fase-3/gitops/manifests/<svc>/`).
 ```bash
 kubectl -n toggle patch deployment <svc>-deployment -p \
   '{"spec":{"replicas":3}}'
@@ -100,4 +102,5 @@ Se após **30 minutos** o alerta não resolver com restart:
 **Métrica**: `http_server_request_duration_seconds_count`
 **Limite**: 5% de 5xx
 **Condição**: por 2 minutos
-**Self-Healing**: GitHub Action `self-healing.yml` (restart de deployment)
+**Self-Healing**: GitHub Action `self-healing.yml` (restart de deployment, cooldown de 10 min)
+**Disparo manual**: `gh workflow run self-healing.yml --ref lab -f service=<svc>`
