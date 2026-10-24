@@ -74,7 +74,7 @@ spec:
                 name: targeting-configmap
             - secretRef:
                 name: targeting-secret
-          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/targeting-image:0.0.0-lab.45-7a5099d
+          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/targeting-image:0.0.0-lab.47-2b18dd1
           livenessProbe:
             failureThreshold: 3
             httpGet:
@@ -115,7 +115,7 @@ kind: Job
 metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
-  name: targeting-migrate-7a5099d
+  name: targeting-migrate-2b18dd1
   namespace: toggle
 spec:
   activeDeadlineSeconds: 600
@@ -134,7 +134,7 @@ spec:
           envFrom:
             - secretRef:
                 name: targeting-secret
-          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/targeting-image:0.0.0-lab.45-7a5099d
+          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/targeting-image:0.0.0-lab.47-2b18dd1
           name: migrate
           resources:
             limits:
