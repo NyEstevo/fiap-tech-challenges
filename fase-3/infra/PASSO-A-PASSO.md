@@ -45,6 +45,16 @@ export AWS_SESSION_TOKEN="..."
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
+> **Obrigatório para o Terraform:** o `null_resource.eso_aws_creds` lê as
+> credenciais das **variáveis de ambiente** (não do `~/.aws`). Se você usou
+> `aws configure`, exporte a partir dele antes de qualquer `terraform apply`:
+>
+> ```bash
+> export AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
+> export AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
+> export AWS_SESSION_TOKEN=$(aws configure get aws_session_token)
+> ```
+
 4. Valide:
 
 ```bash
@@ -158,10 +168,12 @@ terraform apply
 #         (~15-20 min, RDS é o mais lento)
 
 terraform apply -var bootstrap_gitops_root_app=true
-# yes  -> cria a root Application do ArgoCD (kubernetes_manifest).
-#         Separado porque esse recurso exige conexão viva com a API do
-#         cluster já no plan -- só funciona com o EKS + ArgoCD no ar.
-#         Alternativa manual: kubectl apply -f fase-3/gitops/root-app.yaml
+# yes  -> aplica os ApplicationSets do ArgoCD (local.gitops_root_app_paths):
+#         fase-3/gitops/applicationset.yaml (servicos + platform + ingress)
+#         fase-4/gitops/applicationset.yaml (observabilidade)
+#         Separado porque exige conexão viva com a API do cluster -- só
+#         funciona com o EKS + ArgoCD no ar.
+#         Alternativa manual: kubectl apply -f <cada applicationset.yaml>
 ```
 
 Applies seguintes: `terraform apply -var bootstrap_gitops_root_app=true`.
@@ -174,7 +186,7 @@ Applies seguintes: `terraform apply -var bootstrap_gitops_root_app=true`.
 
 ```bash
 aws eks update-kubeconfig --name tc-eks --region us-east-1
-kubectl get nodes          # 2 nodes Ready
+kubectl get nodes          # 3 nodes Ready (t3.medium; a fase-4 precisa do 3º)
 ```
 
 ### 6.2 Secrets do K8s — via External Secrets Operator
@@ -283,8 +295,9 @@ kubectl get scaledobject -n toggle                         # analytics — READY
 
 ```bash
 kubectl get applications -n argocd
-# toggle-master-root + auth/flag/targeting/evaluation/analytics-service
-# Objetivo: SYNC STATUS = Synced, HEALTH = Healthy
+# fase-3: auth/flags/targeting/evaluation/analytics-service, platform, ingress
+# fase-4: observability, kube-prometheus-stack, loki, otel-collector
+# Objetivo: as 11 com SYNC STATUS = Synced, HEALTH = Healthy
 ```
 
 Acessar a UI (rápido, sem ingress):
@@ -302,10 +315,26 @@ Testar o roteamento externo:
 NLB=$(kubectl get svc -n ingress-nginx ingress-nginx-controller \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 curl -s "http://$NLB/auth/health"
-curl -s "http://$NLB/flag/health"
+curl -s "http://$NLB/flags/health"
 ```
 
 Se um Application ficar `Degraded` por falta de Secret, volte ao **Passo 6.2**.
+
+### 8.1 Ambiente recriado: ECR vazio
+
+Ao recriar o lab, os repositórios ECR nascem vazios e os pods ficam em
+`ImagePullBackOff`. Rode o CI de cada serviço (`Actions → ci-<svc> → Run
+workflow`, branch `lab`) ou faça build/push manual com a tag que a overlay
+pede (`newTag` em `fase-3/gitops/manifests/<svc>/kustomization.yaml`). Se um
+Job de migration estourar o prazo nesse meio-tempo, apague o Job e peça novo
+sync no ArgoCD.
+
+### 8.2 Observabilidade (fase-4)
+
+Grafana, chaves externas (Datadog, PagerDuty, Slack, token do GitHub) e a
+prova real do self-healing: ver [`fase-4/README.md`](../../fase-4/README.md),
+seção **"Chaves externas: onde e como configurar"**, e
+[`fase-4/ROTEIRO-PROVA-REAL.md`](../../fase-4/ROTEIRO-PROVA-REAL.md).
 
 ---
 
@@ -361,7 +390,9 @@ para removê-lo de fato: `cd fase-3/infra/bootstrap && terraform destroy`
 
 | Sintoma | Causa | Ação |
 |---|---|---|
-| `ExpiredToken` / `InvalidClientTokenId` | credenciais do lab expiraram | refazer Passo 1 e Passo 3.1 |
+| `ExpiredToken` / `InvalidClientTokenId` | credenciais do lab expiraram | refazer Passo 1 e Passo 3.1 (os **3** secrets `AWS_*` juntos) |
+| `terraform apply` falha em `null_resource.eso_aws_creds` | `AWS_*` não exportadas no shell | exportar como no Passo 1 e repetir |
+| Job de migration roda com a imagem antiga logo após um merge | corrida CI × ArgoCD: o merge muda o manifest antes do bump da tag | no ArgoCD, *Terminate* o sync e sincronize de novo após o commit `cd(<svc>): bump` |
 | `Error: Get "http://localhost/api/..."` no 1º apply | providers k8s/helm sem cluster | usar o apply encenado do Passo 5 |
 | `UnauthorizedOperation` em `iam:*` | tentativa de criar IAM | confirmar que nenhum módulo novo cria Role/Policy; usar `LabRole` |
 | Pods `CreateContainerConfigError` | Secret do banco não existe | Passo 6.2 |
@@ -378,6 +409,6 @@ para removê-lo de fato: `cd fase-3/infra/bootstrap && terraform destroy`
 - [ ] Passo 5: `terraform apply` do `envs/lab` concluído sem erro
 - [ ] Passo 7: EKS `ACTIVE`, 3 RDS `available`, Redis `available`, SQS + DLQ, DynamoDB `ACTIVE`, 5 repos ECR
 - [ ] Passo 7.2: metrics-server, ingress-nginx, KEDA e ArgoCD `Running`
-- [ ] Passo 8: 6 Applications do ArgoCD `Synced/Healthy`; `/auth/health` responde pelo NLB
+- [ ] Passo 8: 11 Applications do ArgoCD `Synced/Healthy`; `/auth/health` responde pelo NLB
 - [ ] Passo 9: PR de teste gera comentário de `plan`; merge na `main` aplica com aprovação
 - [ ] Print da estimativa de custos (AWS Pricing Calculator / Cost Explorer) para o relatório
