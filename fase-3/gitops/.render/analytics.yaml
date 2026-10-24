@@ -68,6 +68,8 @@ spec:
               value: "15000"
             - name: OTEL_SEMCONV_STABILITY_OPT_IN
               value: http
+            - name: OTEL_PYTHON_EXCLUDED_URLS
+              value: /health
           envFrom:
             - configMapRef:
                 name: analytics-configmap
