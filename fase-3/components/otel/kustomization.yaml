@@ -55,3 +55,9 @@ patches:
           # e http.response.status_code -- mesmo nome em Go e Python.
           - name: OTEL_SEMCONV_STABILITY_OPT_IN
             value: http
+          # /health fora de traces e metricas (Python; no Go o filtro esta no
+          # codigo). As probes do Kubernetes rodam a cada poucos segundos e
+          # sempre respondem 200: diluiriam a taxa de 5xx do alerta (fatia 9)
+          # e encheriam o APM de traces sem valor.
+          - name: OTEL_PYTHON_EXCLUDED_URLS
+            value: /health

@@ -8,15 +8,13 @@
 #
 # A MASTER_KEY do auth-service e lida direto do secret no cluster (ESO), nunca do git.
 #
-# NOTA sobre flags-service: ate a correcao em fase-2/flags-service/app.py ser
-# publicada no lab/prod (rotas tinham o prefixo /flags duplicado dentro do
-# proprio app, alem do que o Ingress ja remove), as chamadas usam /flags/flags
-# como contorno. Depois que o deploy com a correcao sincronizar no ArgoCD,
-# troque FLAGS_PATH abaixo para "/flags".
+# NOTA sobre flags-service: o Ingress remove o prefixo /flags e o app atende
+# na raiz. O contorno antigo /flags/flags (de quando o app duplicava o prefixo)
+# respondia 405 no POST e caia em GET /<name> ("flags" virava nome de flag).
 
 set -euo pipefail
 
-FLAGS_PATH="/flags/flags"
+FLAGS_PATH="/flags"
 
 ENV="${1:-local}"
 NAMESPACE="toggle"
