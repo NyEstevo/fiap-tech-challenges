@@ -101,6 +101,22 @@ grafana:
     datasources:
       alertmanager:
         enabled: false
+    # Alerting como codigo (fatias 9-10): ConfigMaps com grafana_alert=1 em
+    # manifests/observability/alerting.yaml viram regras, contact points e
+    # policy, recarregados sem reiniciar o Grafana.
+    alerts:
+      enabled: true
+      label: grafana_alert
+      labelValue: "1"
+      searchNamespace: ALL
+
+  # Chaves dos contact points (PagerDuty, Slack, token do GitHub), vindas do
+  # ESO (manifests/observability/alerting-secrets.yaml) como variaveis de
+  # ambiente. optional: sem o Secret o Grafana sobe mesmo assim -- so os
+  # contact points ficam sem chave ate o secret tc-observability existir.
+  envFromSecrets:
+    - name: grafana-alerting
+      optional: true
 
   # Prometheus ja vem provisionado pelo chart; Loki entra aqui (fatia 3).
   additionalDataSources:

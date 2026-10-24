@@ -1,0 +1,143 @@
+# Alerting do Grafana como codigo (fatias 9 e 10).
+#
+# Os ConfigMaps com o label grafana_alert=1 sao lidos pelo sidecar de alertas
+# do Grafana (values/kube-prometheus-stack.yaml), que grava os arquivos em
+# /etc/grafana/provisioning/alerting e pede reload -- sem reiniciar o pod.
+#
+# Fluxo:  regra (5xx > 5% por servico, 2 min)
+#           -> contact point "togglemaster-incidente"
+#                -> PagerDuty  (abre o incidente; fecha sozinho no Resolved)
+#                -> Slack      (ChatOps: avisa o time com servico, valor, runbook)
+#                -> GitHub     (workflow_dispatch do self-healing.yml -> rollout restart)
+#
+# ATENCAO ao "$": nos settings dos contact points o Grafana expande ${VAR} com
+# as variaveis de ambiente (chaves vindas do Secret grafana-alerting). Por isso
+# os templates daqui usam .Labels/.Values (sem "$"). O "model" da query NAO e
+# expandido: o "$1" do label_replace chega intacto ao Prometheus (testado no
+# Grafana 13.2.4).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-rules
+  namespace: observability
+  labels:
+    grafana_alert: "1"
+data:
+  togglemaster-rules.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: togglemaster-5xx
+        folder: ToggleMaster
+        interval: 30s
+        rules:
+          - uid: togglemaster-5xx-alto
+            title: Taxa de erros 5xx acima de 5%
+            condition: B
+            # A: % de respostas 5xx por servico nos ultimos 2 min. O label
+            #    "service" (auth, flags, ...) sai do job do OTel
+            #    (toggle-master/<svc>-service) e e o que o self-healing recebe.
+            #    "and ... > 0.1": so avalia servico com trafego (>0.1 req/s),
+            #    para 1 erro em 3 requisicoes nao virar incidente.
+            # B: dispara quando A > 5.
+            data:
+              - refId: A
+                relativeTimeRange: { from: 300, to: 0 }
+                datasourceUid: prometheus
+                model:
+                  refId: A
+                  instant: true
+                  range: false
+                  expr: |
+                    100 *
+                      sum by (service) (label_replace(rate(http_server_request_duration_seconds_count{job=~"toggle-master/.+-service", http_response_status_code=~"5.."}[2m]), "service", "$1", "job", "toggle-master/(.+)-service"))
+                    / on (service)
+                      sum by (service) (label_replace(rate(http_server_request_duration_seconds_count{job=~"toggle-master/.+-service"}[2m]), "service", "$1", "job", "toggle-master/(.+)-service"))
+                    and on (service)
+                      sum by (service) (label_replace(rate(http_server_request_duration_seconds_count{job=~"toggle-master/.+-service"}[2m]), "service", "$1", "job", "toggle-master/(.+)-service")) > 0.1
+              - refId: B
+                datasourceUid: __expr__
+                model:
+                  refId: B
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator: { type: gt, params: [5] }
+            # Sem dados = sem erro (servico sem 5xx nao gera serie).
+            noDataState: OK
+            execErrState: Error
+            # 2 min sustentado: curto para a demo, longo contra pico isolado.
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "{{ index .Labels \"service\" }}-service com {{ printf \"%.1f\" (index .Values \"A\").Value }}% de respostas 5xx"
+              description: "Mais de 5% das requisicoes do {{ index .Labels \"service\" }}-service estao falhando (5xx) ha 2 minutos. O self-healing vai reiniciar o deployment."
+              runbook_url: https://github.com/NyEstevo/fiap-tech-challenges/blob/lab/fase-4/runbooks/5xx-alto.md
+              dashboard_url: http://localhost:3000/d/togglemaster-saude
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-notifications
+  namespace: observability
+  labels:
+    grafana_alert: "1"
+data:
+  togglemaster-notifications.yaml: |
+    apiVersion: 1
+    contactPoints:
+      - orgId: 1
+        name: togglemaster-incidente
+        receivers:
+          - uid: togglemaster-pagerduty
+            type: pagerduty
+            settings:
+              integrationKey: ${PAGERDUTY_ROUTING_KEY}
+              severity: critical
+              class: http-5xx
+              component: "{{ .CommonLabels.service }}-service"
+              group: toggle-master
+              summary: "{{ .CommonAnnotations.summary }}"
+
+          - uid: togglemaster-slack
+            type: slack
+            settings:
+              url: ${SLACK_WEBHOOK_URL}
+              title: '{{ if eq .Status "firing" }}:rotating_light: ALERTA{{ else }}:white_check_mark: RESOLVIDO{{ end }}: {{ .CommonLabels.service }}-service'
+              text: |
+                {{ range .Alerts }}*{{ .Annotations.summary }}*
+                {{ .Annotations.description }}
+                Runbook: {{ .Annotations.runbook_url }}
+                Dashboard: {{ .Annotations.dashboard_url }}
+                {{ end }}
+
+          # Self-healing: chama a API de workflow_dispatch do GitHub. Nao e
+          # repository_dispatch porque esse so roda workflows da branch padrao
+          # (main), e a fase-4 vive na lab -- aqui o "ref" escolhe a branch.
+          # Sem mensagem de Resolved: so o Firing deve reiniciar algo.
+          - uid: togglemaster-self-healing
+            type: webhook
+            disableResolveMessage: true
+            settings:
+              url: https://api.github.com/repos/NyEstevo/fiap-tech-challenges/actions/workflows/self-healing.yml/dispatches
+              httpMethod: POST
+              authorization_scheme: Bearer
+              authorization_credentials: ${GITHUB_DISPATCH_TOKEN}
+              headers:
+                Accept: application/vnd.github+json
+                X-GitHub-Api-Version: "2022-11-28"
+              payload:
+                template: |
+                  {"ref": "lab", "inputs": {"service": "{{ .CommonLabels.service }}", "motivo": "{{ .CommonLabels.alertname }}"}}
+
+    # Policy raiz: tudo vai para o contact point acima. Agrupar por servico
+    # garante 1 notificacao (e 1 restart) por servico afetado, e o
+    # repeat_interval longo evita reabrir/reiniciar em loop (anti alert fatigue).
+    policies:
+      - orgId: 1
+        receiver: togglemaster-incidente
+        group_by: [alertname, service]
+        group_wait: 10s
+        group_interval: 1m
+        repeat_interval: 4h
