@@ -23,6 +23,7 @@ import (
 type App struct {
 	DB        *sql.DB
 	MasterKey string
+	Chaos     *ChaosInjector
 }
 
 func main() {
@@ -64,6 +65,7 @@ func main() {
 	app := &App{
 		DB:        db,
 		MasterKey: masterKey,
+		Chaos:     NewChaosInjector(),
 	}
 
 	// --- Rotas da API ---
@@ -77,7 +79,14 @@ func main() {
 	// Eles são protegidos pelo middleware de autenticação
 	mux.Handle("/admin/keys", app.masterKeyAuthMiddleware(http.HandlerFunc(app.createKeyHandler)))
 
-	srv := &http.Server{Addr: ":" + port, Handler: instrumentHandler(mux)}
+	// Injecao de falha da fase-4 (chaos.go): so existe com CHAOS_ENABLED=true.
+	var handler http.Handler = mux
+	if os.Getenv("CHAOS_ENABLED") == "true" {
+		mux.Handle("/admin/chaos", app.masterKeyAuthMiddleware(http.HandlerFunc(app.chaosHandler)))
+		handler = app.Chaos.Middleware(mux)
+	}
+
+	srv := &http.Server{Addr: ":" + port, Handler: instrumentHandler(handler)}
 	go func() {
 		log.Printf("Serviço de Autenticação (Go) rodando na porta %s", port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
