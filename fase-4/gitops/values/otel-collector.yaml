@@ -15,19 +15,25 @@
 # (status.hostIP), sem atravessar a rede para outro no.
 mode: daemonset
 
-# Variaveis de ambiente: DD_API_KEY e DD_SITE vem do Secret "datadog-keys"
-# (criado pelo ExternalSecret). O Collector as substitui na config via ${env:...}.
+# DD_API_KEY e DD_SITE vem do Secret "datadog-keys" (ExternalSecret em
+# manifests/observability/datadog-keys.yaml). optional + valor padrao na config
+# (${env:DD_API_KEY:-sem-chave}): sem o secret no Secrets Manager o Collector
+# SOBE do mesmo jeito -- so o envio ao Datadog falha (erro no log), e metricas
+# e logs para Prometheus/Loki seguem funcionando. Sem isso, faltar a chave
+# derrubaria a observabilidade inteira.
 extraEnvs:
   - name: DD_API_KEY
     valueFrom:
       secretKeyRef:
         name: datadog-keys
         key: DD_API_KEY
+        optional: true
   - name: DD_SITE
     valueFrom:
       secretKeyRef:
         name: datadog-keys
         key: DD_SITE
+        optional: true
 
 # contrib: traz os componentes que o core nao tem (k8sattributes, filelog e,
 # na fatia 7, o exporter/connector do Datadog).
@@ -87,46 +93,47 @@ config:
       endpoint: http://loki.observability.svc.cluster.local:3100/otlp
       tls:
         insecure: true
-    # Datadog APM: traces enviados ao Datadog para Service Map e visualizacao
-    # de traces distribuidos. O exporter usa DD_API_KEY e DD_SITE do ambiente.
+    # Datadog APM (sem Datadog Agent): recebe os traces e as estatisticas de
+    # APM calculadas pelo connector abaixo. service.name vira o "service" e
+    # deployment.environment (processor resource) vira o "env:lab".
     datadog:
       api:
-        key: ${env:DD_API_KEY}
-        site: ${env:DD_SITE}
-      # Tags globais para o host no Datadog. Os servicos ja informam service.name,
-      # e o k8sattributes processor adiciona deployment, namespace, pod, etc.
+        key: ${env:DD_API_KEY:-sem-chave}
+        site: ${env:DD_SITE:-datadoghq.com}
       host_metadata:
         tags:
           - env:lab
 
-  # Connector: transforma traces em metricas para Datadog APM (Service Map).
-  # O Datadog connector le os traces e computa: hits, errors, duration por
-  # servico. Essas metricas alimentam a page de APM, grafico de dependencias
-  # (Service Map) e alertas de SLO.
+  # Connector datadog: le os traces (ponta de saida do pipeline traces) e
+  # calcula hits, erros e latencia por servico/recurso -- as "APM stats" que
+  # desenham a Service Page e o Service Map. Elas saem como metricas em um
+  # pipeline proprio que vai SO para o Datadog (sao especificas dele; no
+  # Prometheus seriam lixo).
   connectors:
-    datadog/traces: {}
+    datadog/connector: {}
 
   service:
     pipelines:
       # Ordem dos processors: memory_limiter primeiro (protege antes de
       # gastar memoria), batch por ultimo (agrupa o que ja foi enriquecido).
-      # Nota: o connector datadog/traces é um receiver que gera metricas a
-      # partir dos traces, então é incluído aqui.
       metrics:
-        receivers: [otlp, prometheus, datadog/traces]
+        receivers: [otlp, prometheus]
         processors: [memory_limiter, k8sattributes, resource, batch]
         exporters: [otlphttp/prometheus]
       logs:
         receivers: [otlp, filelog]
         processors: [memory_limiter, k8sattributes, resource, batch]
         exporters: [otlphttp/loki]
-      # Traces para Datadog APM: passa pelo connector datadog/traces para
-      # gerar metricas (hits, errors, latencia por servico), que alimentam
-      # o APM/Service Map. Os traces sao exportados ao Datadog direto.
+      # Traces: vao ao Datadog e, em paralelo, ao connector que calcula as
+      # APM stats; estas voltam como metricas no pipeline metrics/datadog.
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [datadog, datadog/traces]
+        exporters: [datadog, datadog/connector]
+      metrics/datadog:
+        receivers: [datadog/connector]
+        processors: [memory_limiter, batch]
+        exporters: [datadog]
 
 # memory_limiter usa limit_percentage (80% do limit abaixo); GOMEMLIMIT
 # (useGOMEMLIMIT, default true) acompanha o mesmo limit.

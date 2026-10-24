@@ -1,11 +1,11 @@
+# Chave do Datadog (fatia 7), lida do secret tc-observability do AWS Secrets
+# Manager pelo ESO. Consumida pelo OTel Collector (values/otel-collector.yaml)
+# como env opcional: sem ela o Collector sobe e so o Datadog fica sem dados.
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: datadog-keys
   namespace: observability
-  annotations:
-    # Wave -3 para garantir que o Secret exista antes do DaemonSet do Collector
-    argocd.argoproj.io/sync-wave: "-3"
 spec:
   refreshInterval: 1h
   secretStoreRef:
@@ -14,8 +14,6 @@ spec:
   target:
     name: datadog-keys
     creationPolicy: Owner
-    # Retain: se o recurso for pruned, o Secret continua no ar.
-    deletionPolicy: Retain
   data:
     - secretKey: DD_API_KEY
       remoteRef:
