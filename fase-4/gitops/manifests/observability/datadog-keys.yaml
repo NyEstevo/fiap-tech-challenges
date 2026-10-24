@@ -1,0 +1,27 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: datadog-keys
+  namespace: observability
+  annotations:
+    # Wave -3 para garantir que o Secret exista antes do DaemonSet do Collector
+    argocd.argoproj.io/sync-wave: "-3"
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: datadog-keys
+    creationPolicy: Owner
+    # Retain: se o recurso for pruned, o Secret continua no ar.
+    deletionPolicy: Retain
+  data:
+    - secretKey: DD_API_KEY
+      remoteRef:
+        key: tc-observability
+        property: DD_API_KEY
+    - secretKey: DD_SITE
+      remoteRef:
+        key: tc-observability
+        property: DD_SITE
