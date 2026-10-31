@@ -1,0 +1,123 @@
+# Repoe no ECR as imagens que o GitOps pede.
+#
+# Problema: ao recriar o lab (destroy + apply), os repositorios ECR nascem
+# vazios (force_delete), mas o git continua apontando para as tags antigas
+# (newTag em fase-3/gitops/manifests/<svc>/kustomization.yaml). O ArgoCD
+# aplica os manifests e os pods ficam em ImagePullBackOff -- o GitOps entrega
+# a receita, mas ninguem cozinha o prato.
+#
+# O que faz: para cada servico de fase-3/services.yaml (fonte unica, nada de
+# lista aqui), confere se TODAS as imagens do ECR citadas na kustomization
+# existem. Se faltar alguma (ou com force=true), dispara o ci-<svc>.yml na
+# lab: o CI builda, escaneia, faz push e o gitops-update bumpa a tag no git,
+# entao o ArgoCD sincroniza sozinho.
+#
+# Quem chama: o infra-tf-apply (job 'images', depois do apply na lab), ou a mao
+# depois de um apply local:
+#   gh workflow run images-restore.yml --ref lab
+#   gh workflow run images-restore.yml --ref lab -f force=true   # rebuild dos 5
+name: images-restore
+
+on:
+  workflow_call:
+    inputs:
+      force:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild de todos os servicos, mesmo com a imagem no ECR"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write   # gh workflow run ci-<svc>.yml
+
+concurrency:
+  group: images-restore-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # O gitops-update (bump da tag no git) so existe na lab. Em outra branch
+      # o rebuild subiria a imagem sem ninguem apontar o git para ela.
+      - name: so na lab
+        if: github.ref_name != 'lab'
+        run: |
+          echo "::error::images-restore so roda na branch lab (atual: ${GITHUB_REF_NAME})"
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            fase-3/services.yaml
+            fase-3/gitops/manifests
+            .github/actions
+
+      - uses: ./.github/actions/aws-auth
+        with:
+          environment: lab
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - name: conferir ECR e disparar CI dos servicos sem imagem
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          rebuild=()
+          {
+            echo "## images-restore"
+            echo ""
+            echo "| servico | imagem pedida pelo git | situacao |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for svc in $(yq '.services[].name' fase-3/services.yaml); do
+            kust="fase-3/gitops/manifests/${svc}/kustomization.yaml"
+            falta=false
+            # So as imagens deste ECR (newName com .dkr.ecr.); 'name' e o
+            # identificador antigo da fase-2 e nunca e puxado.
+            while read -r name tag; do
+              repo="${name#*/}"   # tira o registry -> tech-challenge/<svc>-image
+              if err=$(aws ecr describe-images --repository-name "$repo" \
+                    --image-ids imageTag="$tag" 2>&1 >/dev/null); then
+                situacao="ok"
+              elif grep -q ImageNotFoundException <<<"$err"; then
+                situacao="faltando"
+                falta=true
+              else
+                # Repo inexistente ou credencial vencida: o rebuild tambem
+                # falharia, melhor parar com a mensagem da AWS.
+                echo "::error::${repo}: ${err}"
+                exit 1
+              fi
+              echo "${svc}: ${repo}:${tag} -> ${situacao}"
+              echo "| ${svc} | \`${repo}:${tag}\` | ${situacao} |" >> "$GITHUB_STEP_SUMMARY"
+            done < <(yq '.images[] | select(.newName | test("\.dkr\.ecr\.")) | .newName + " " + .newTag' "$kust")
+
+            if [ "$falta" = true ] || [ "$FORCE" = true ]; then
+              rebuild+=("$svc")
+            fi
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${#rebuild[@]}" -eq 0 ]; then
+            echo "Todas as imagens existem no ECR. Nada a fazer." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for svc in "${rebuild[@]}"; do
+            gh workflow run "ci-${svc}.yml" --ref "$GITHUB_REF_NAME"
+            echo "- disparado \`ci-${svc}.yml\` na \`${GITHUB_REF_NAME}\`" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
