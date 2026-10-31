@@ -215,3 +215,14 @@ jobs:
             terraform output -json | jq 'map_values(if .sensitive then "<sensitive>" else .value end)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Lab recriado = ECR vazio. Repoe as imagens que o git pede (so as que
+  # faltam); sem isso os pods ficam em ImagePullBackOff.
+  images:
+    needs: [ resolve, apply ]
+    if: needs.apply.result == 'success' && needs.resolve.outputs.environment == 'lab' && github.ref_name == 'lab'
+    permissions:
+      contents: read
+      actions: write
+    uses: ./.github/workflows/images-restore.yml
+    secrets: inherit
