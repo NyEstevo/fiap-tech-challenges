@@ -1,0 +1,154 @@
+# Self-Healing (fatia 10): reinicia o deployment de um servico quando o alerta
+# "5xx > 5%" do Grafana dispara.
+#
+# Quem chama: o contact point "GitHub" do Grafana
+# (fase-4/gitops/manifests/observability/alerting.yaml) via API
+#   POST /repos/NyEstevo/fiap-tech-challenges/actions/workflows/self-healing.yml/dispatches
+#   {"ref": "lab", "inputs": {"service": "auth", "motivo": "..."}}
+# workflow_dispatch e nao repository_dispatch: este so roda workflows da branch
+# padrao (main), e a fase-4 vive na lab. Tambem da para disparar a mao:
+#   gh workflow run self-healing.yml --ref lab -f service=auth
+#
+# Travas contra estrago:
+#   - allowlist: o servico precisa existir em fase-3/services.yaml (fonte unica,
+#     nada de lista de servicos aqui);
+#   - concurrency por servico: 2 alertas seguidos nao geram 2 restarts juntos;
+#   - cooldown: se o deployment foi reiniciado ha menos de COOLDOWN_SECONDS,
+#     nao reinicia de novo -- se o restart nao cura, o problema nao e de estado
+#     e o humano do PagerDuty assume (evita loop de restart).
+name: self-healing
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Servico a reiniciar (nome em fase-3/services.yaml, ex.: auth)"
+        required: true
+        type: string
+      motivo:
+        description: "Por que (o Grafana manda o nome do alerta)"
+        required: false
+        type: string
+        default: manual
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-healing-${{ inputs.service }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: tc-eks
+  NAMESPACE: toggle
+  COOLDOWN_SECONDS: "600"
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # main = prod (OIDC); qualquer outra branch = lab (chaves de sessao).
+    env:
+      ENVIRONMENT: ${{ github.ref_name == 'main' && 'prod' || 'lab' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            fase-3/services.yaml
+            .github/actions
+
+      # O input vem de fora (webhook): so entra em variavel de ambiente, nunca
+      # interpolado direto no script (evita injecao de comando).
+      - name: validar servico (allowlist = services.yaml)
+        id: svc
+        env:
+          SERVICE: ${{ inputs.service }}
+        run: |
+          if [[ ! "$SERVICE" =~ ^[a-z0-9-]+$ ]] \
+            || ! yq -e '.services[] | select(.name == strenv(SERVICE))' fase-3/services.yaml >/dev/null; then
+            echo "::error::servico '$SERVICE' nao esta em fase-3/services.yaml"
+            exit 1
+          fi
+          echo "deployment=${SERVICE}-deployment" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/aws-auth
+        with:
+          environment: ${{ env.ENVIRONMENT }}
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
+
+      # `kubectl rollout restart` grava o horario em
+      # spec.template.metadata.annotations["kubectl.kubernetes.io/restartedAt"]:
+      # e a propria marca do ultimo restart, sem estado extra.
+      - name: cooldown
+        id: cooldown
+        env:
+          DEPLOYMENT: ${{ steps.svc.outputs.deployment }}
+        run: |
+          last=$(kubectl -n "$NAMESPACE" get deployment "$DEPLOYMENT" \
+            -o jsonpath='{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}')
+          if [[ -n "$last" ]]; then
+            age=$(( $(date +%s) - $(date -d "$last" +%s) ))
+            if (( age < COOLDOWN_SECONDS )); then
+              echo "::warning::$DEPLOYMENT reiniciado ha ${age}s (< ${COOLDOWN_SECONDS}s): restart pulado, escalar para humano"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: rollout restart
+        if: steps.cooldown.outputs.skip == 'false'
+        env:
+          DEPLOYMENT: ${{ steps.svc.outputs.deployment }}
+        run: |
+          kubectl -n "$NAMESPACE" rollout restart deployment "$DEPLOYMENT"
+          kubectl -n "$NAMESPACE" rollout status deployment "$DEPLOYMENT" --timeout=5m
+
+      - name: estado final
+        if: always() && steps.svc.outputs.deployment != ''
+        env:
+          SERVICE: ${{ inputs.service }}
+          MOTIVO: ${{ inputs.motivo }}
+          SKIP: ${{ steps.cooldown.outputs.skip }}
+        run: |
+          {
+            echo "## Self-healing: ${SERVICE}"
+            echo "- motivo: ${MOTIVO}"
+            echo "- ambiente: ${ENVIRONMENT}"
+            echo "- restart pulado por cooldown: ${SKIP:-n/a}"
+            echo '```'
+            kubectl -n "$NAMESPACE" get pods -l "app=${SERVICE}" -o wide
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ChatOps: fecha o ciclo no Slack (o alerta ja avisou que abriu). A URL
+      # sai do mesmo secret do Secrets Manager que o Grafana usa; sem ela, so
+      # pula.
+      - name: avisar no Slack
+        if: always() && steps.svc.outputs.deployment != ''
+        continue-on-error: true
+        env:
+          SERVICE: ${{ inputs.service }}
+          SKIP: ${{ steps.cooldown.outputs.skip }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          url=$(aws secretsmanager get-secret-value --secret-id tc-observability \
+                  --query SecretString --output text 2>/dev/null | jq -r '.SLACK_WEBHOOK_URL // empty') || true
+          [[ -z "$url" ]] && { echo "SLACK_WEBHOOK_URL ausente: pulando"; exit 0; }
+          if [[ "$SKIP" == "true" ]]; then
+            text=":warning: Self-healing do *${SERVICE}-service* pulado (cooldown): o restart anterior nao resolveu, precisa de humano. <${RUN_URL}|execucao>"
+          elif [[ "$JOB_STATUS" == "success" ]]; then
+            text=":wrench: Self-healing: *${SERVICE}-service* reiniciado e pronto (rollout ok). <${RUN_URL}|execucao>"
+          else
+            text=":x: Self-healing do *${SERVICE}-service* falhou. <${RUN_URL}|execucao>"
+          fi
+          jq -n --arg text "$text" '{text: $text}' | curl -fsS -X POST -H 'Content-Type: application/json' -d @- "$url"
