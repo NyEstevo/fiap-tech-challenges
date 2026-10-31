@@ -11,4 +11,4 @@ kind: Kustomization
 resources:
 - migrate-job.yaml
 
-nameSuffix: -598f63a
+nameSuffix: -05ab229
