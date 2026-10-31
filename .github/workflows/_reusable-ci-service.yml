@@ -249,9 +249,12 @@ jobs:
           docker push "${IMG}:sha-${GITHUB_SHA::12}"
 
   # ---------------------------------- GitOps: bump da tag na branch lab (push/lab)
+  # workflow_dispatch tambem bumpa: e assim que o images-restore repoe o ECR
+  # vazio de um lab recriado (a tag nova tem outro run_number, entao sem bump
+  # o git continuaria pedindo a tag antiga, que nao existe mais).
   gitops-update:
     needs: docker-build-scan-push
-    if: github.event_name == 'push' && github.ref_name == 'lab'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name == 'lab'
     runs-on: ubuntu-latest
     permissions:
       contents: write

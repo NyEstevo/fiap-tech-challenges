@@ -323,11 +323,16 @@ Se um Application ficar `Degraded` por falta de Secret, volte ao **Passo 6.2**.
 ### 8.1 Ambiente recriado: ECR vazio
 
 Ao recriar o lab, os repositórios ECR nascem vazios e os pods ficam em
-`ImagePullBackOff`. Rode o CI de cada serviço (`Actions → ci-<svc> → Run
-workflow`, branch `lab`) ou faça build/push manual com a tag que a overlay
-pede (`newTag` em `fase-3/gitops/manifests/<svc>/kustomization.yaml`). Se um
-Job de migration estourar o prazo nesse meio-tempo, apague o Job e peça novo
-sync no ArgoCD.
+`ImagePullBackOff`. O workflow **`images-restore`** resolve: confere, para
+cada serviço do `services.yaml`, se a tag que a overlay pede (`newTag` em
+`fase-3/gitops/manifests/<svc>/kustomization.yaml`) existe no ECR e, se não
+existir, dispara o `ci-<svc>` na `lab`. O CI faz o push e bumpa a tag no git;
+o ArgoCD sincroniza sozinho. O nome do Job de migration muda junto com o bump,
+então um Job que estourou o prazo é substituído por um novo.
+
+- Apply pelo GitHub (`infra-tf-apply` na `lab`): roda sozinho no fim (job `images`).
+- Apply local: `gh workflow run images-restore.yml --ref lab`.
+- Rebuild dos 5, mesmo com imagem no ECR: `gh workflow run images-restore.yml --ref lab -f force=true`.
 
 ### 8.2 Observabilidade (fase-4)
 
