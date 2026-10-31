@@ -3,18 +3,14 @@ kind: Kustomization
 
 # Base da stack de observabilidade: o que nao vem de chart Helm (senha do
 # Grafana, chaves externas via ESO, alerting do Grafana como codigo).
-resources:
-- namespace.yaml
-- grafana-admin.yaml
-- alerting-secrets.yaml
-- alerting.yaml
-# Base da stack de observabilidade: o que nao vem de chart Helm. Nas proximas
-# fatias entram aqui os ExternalSecrets (Datadog, PagerDuty, Slack, GitHub)
-# e as regras de alerta do Grafana.
+# Uma lista so: com duas chaves 'resources:' o YAML fica com a ultima e as
+# outras somem do render sem erro nenhum.
 resources:
 - namespace.yaml
 - grafana-admin.yaml
 - datadog-keys.yaml
+- alerting-secrets.yaml
+- alerting.yaml
 
 # Dashboards como codigo. O sidecar do Grafana (kube-prometheus-stack) carrega
 # todo ConfigMap com o label grafana_dashboard: "1", de qualquer namespace.
