@@ -77,7 +77,7 @@ spec:
                 name: analytics-secret
             - secretRef:
                 name: aws-session-creds
-          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image:0.0.0-lab.42-2b18dd1
+          image: 238903440658.dkr.ecr.us-east-1.amazonaws.com/tech-challenge/analytics-image:0.0.0-lab.45-05ab229
           livenessProbe:
             failureThreshold: 3
             httpGet:
