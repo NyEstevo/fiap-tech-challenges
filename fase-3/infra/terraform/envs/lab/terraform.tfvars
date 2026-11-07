@@ -1,5 +1,5 @@
 region          = "us-east-1"
-account_id      = "238903440658"
+account_id      = "730335507360"
 environment     = "lab"
 cluster_name    = "tc-eks"
 cluster_version = "1.31"
