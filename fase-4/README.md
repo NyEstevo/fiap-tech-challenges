@@ -47,9 +47,7 @@ Instrumentamos os 5 microsserviços do ToggleMaster (`auth`, `flags`, `targeting
 | | Workflow de Self-Healing e runbook | [`.github/workflows/self-healing.yml`](../.github/workflows/self-healing.yml) + [`runbooks/5xx-alto.md`](runbooks/5xx-alto.md) |
 | | Injeção de falha e geração de tráfego para a prova real | `fase-2/auth-service/chaos.go` + [`scripts/`](scripts/) |
 
-4. **Relatório de Entrega (.PDF):** 🚧 nomes, RMs e usernames; links do repositório e do vídeo; [Evidências Visuais](#evidências-visuais); [Justificativa Técnica](#justificativa-técnica).
-
-5. **Integrantes do Grupo**:
+4. **Integrantes do Grupo**:
 
 - [Aline Estevo da Silva](https://www.linkedin.com/in/aline-estevo)
 - [Thiago de Melo Macedo](https://www.linkedin.com/in/thiago-melo-macedo)
