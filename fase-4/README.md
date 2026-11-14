@@ -339,14 +339,57 @@ Segue os quatro blocos pedidos no enunciado. O roteiro completo do bloco 4, com 
 
 ## Evidências Visuais
 
-🚧 _Prints obrigatórios do relatório, a adicionar após a gravação do vídeo (salvar em `/.github/` com os nomes abaixo):_
+Prints capturados no ambiente `lab` durante a prova real (7 de novembro de 2026).
 
-| # | Evidência exigida | O que capturar | Arquivo |
-|---|---|---|---|
-| 1 | Print do Dashboard do Grafana | dashboard "Saúde do Ecossistema ToggleMaster" com tráfego nos 5 serviços | `/.github/Fase4-DashboardGrafana.png` |
-| 2 | Print de um Trace distribuído no APM | trace de uma chamada ao `evaluation` (auth/flags/targeting → Redis → SQS → analytics) e o Service Map no Datadog | `/.github/Fase4-TraceDatadog.png` |
-| 3 | Print da notificação de incidente no ChatOps | mensagem "ALERTA: auth-service" no Slack e o incidente aberto no PagerDuty | `/.github/Fase4-IncidenteSlackPagerDuty.png` |
-| 4 | Print do log/execução da automação de Self-Healing | Step Summary do workflow `self-healing` e o pod do `auth` reiniciado (`kubectl get pods -w`) | `/.github/Fase4-SelfHealing.png` |
+| # | Evidência exigida | Print |
+|---|---|---|
+| 1 | Print do Dashboard do Grafana | [1.1](#11-dashboard-do-grafana--visão-geral-e-red) e [1.2](#12-dashboard-do-grafana--recursos-do-cluster) |
+| 2 | Print de um Trace distribuído no APM | [2.1](#21-trace-distribuído-no-datadog-apm) e [2.2](#22-service-map-no-datadog) |
+| 3 | Print da notificação de incidente no ChatOps | [3](#3-incidente-no-slack-e-no-pagerduty) |
+| 4 | Print do log/execução da automação de Self-Healing | [4](#4-execução-do-self-healing) |
+| — | Complemento: arquitetura da coleta de telemetria | [5](#5-diagrama-do-opentelemetry-collector) |
+
+### 1.1 Dashboard do Grafana — visão geral e RED
+
+Topo do dashboard **"ToggleMaster — Saúde do Ecossistema"**. A primeira linha responde "o ecossistema está saudável?" com cinco indicadores: requisições por segundo, percentual de erros 5xx, latência p95, restarts na última hora e serviços no ar (5 de 5). A segunda linha mostra o método RED (tráfego, erros e latência) separado por serviço. O pico de 100% de erros 5xx no `auth` é a falha injetada na prova real, que depois volta a 0% após o self-healing.
+
+![Dashboard do Grafana — visão geral e RED por serviço](/.github/Fase4-DashboardGrafana-1.png)
+
+### 1.2 Dashboard do Grafana — recursos do cluster
+
+Parte de baixo do mesmo dashboard: uso de CPU e memória do cluster (medidores), CPU e memória por serviço, réplicas disponíveis por serviço e restarts de containers. No gráfico de réplicas aparece o `auth` subindo de 1 para 2 réplicas por alguns instantes: é o rollout do self-healing criando o pod novo antes de derrubar o antigo, sem nenhum restart de container.
+
+![Dashboard do Grafana — recursos do cluster e dos serviços](/.github/Fase4-DashboardGrafana.png)
+
+### 2.1 Trace distribuído no Datadog APM
+
+Flame graph de um único `trace_id` iniciado por um `GET` no `evaluation-service` (157 ms, 200 OK, 20 spans). Dá para seguir a chamada atravessando os serviços: `evaluation` consulta `auth`, `flags` e `targeting` (cada um com suas queries `SELECT` no PostgreSQL), lê o Redis, publica o evento no SQS (`send tc-sqs`) e o `analytics-service` consome a mensagem (`process tc-sqs`) e grava no DynamoDB (`PutItem`). A coluna da direita mostra quanto do tempo total cada serviço consumiu.
+
+![Trace distribuído no Datadog APM com a pilha de spans](/.github/DatadogTraceIDComPilha.png)
+
+### 2.2 Service Map no Datadog
+
+Mapa de dependências do `evaluation-service` no ambiente `lab`, montado automaticamente pelo Datadog a partir dos traces. Mostra o caminho completo: `evaluation` → Redis, `targeting`, `flags` e `analytics`; `targeting` e `flags` → `auth` → `auth_db`; cada serviço → seu banco dedicado; `analytics` → SQS e DynamoDB. Todos os nós com 0% de erro no momento da captura.
+
+![Service Map do evaluation-service no Datadog](/.github/DatadogServicemap.png)
+
+### 3. Incidente no Slack e no PagerDuty
+
+À direita, o canal `#togglemaster-alertas` no Slack recebe do Grafana o **"ALERTA: auth-service"** (100% de respostas 5xx), com link para o runbook e para o dashboard. Logo abaixo aparece a mensagem do self-healing ("auth-service reiniciado e pronto") e, minutos depois, o **"RESOLVIDO: auth-service"**. À esquerda, o mesmo alerta abriu o incidente #12 no PagerDuty (status *Triggered*), e embaixo está a execução do workflow `self-healing` disparada no GitHub Actions.
+
+![Notificação de incidente no Slack e incidente aberto no PagerDuty](/.github/Fase4-IncidenteSlackPagerDuty.png)
+
+### 4. Execução do Self-Healing
+
+Step Summary do workflow `self-healing.yml` no GitHub Actions (job `restart`, sucesso em 26 s). O resumo registra o motivo ("Taxa de erros 5xx acima de 5%"), o ambiente (`lab`), que o cooldown não bloqueou o restart e a lista de pods depois do rollout: o `auth-deployment` novo está `Running` com 7 segundos de idade e 0 restarts.
+
+![Step Summary da execução do workflow self-healing](/.github/Fase4-SelfHealing.png)
+
+### 5. Diagrama do OpenTelemetry Collector
+
+Complemento para a justificativa técnica: como a telemetria sai dos 5 serviços e chega às ferramentas. Cada serviço envia traces e métricas via OTLP/HTTP para o Collector do próprio nó (DaemonSet), e o Collector lê os logs em `/var/log/pods`. Dentro dele há quatro pipelines: **traces** → Datadog APM, **metrics/datadog** (estatísticas de APM calculadas pelo connector) → Datadog, **metrics** → Prometheus e **logs** → Loki. O Grafana consulta Prometheus e Loki. Nenhum serviço conhece o backend: trocar de ferramenta é trocar o exporter, sem mexer no código.
+
+![Diagrama do pipeline do OpenTelemetry Collector](/.github/DiagramaOTELCollectorDark.png)
 
 ## Diagrama de Arquitetura
 
