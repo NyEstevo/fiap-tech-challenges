@@ -15,20 +15,21 @@ Instrumentamos os 5 microsserviços do ToggleMaster (`auth`, `flags`, `targeting
 
 ## Entregáveis da Fase 4
 
-1. **Vídeo de Demonstração (até 25 minutos):** 🚧 [Vídeo de Demonstração Tech Challenge Fase 4](#) — roteiro em [`ROTEIRO-PROVA-REAL.md`](ROTEIRO-PROVA-REAL.md).
+1. **Vídeo de Demonstração (até 25 minutos):** 🚧 [Vídeo de Demonstração Tech Challenge Fase 4](#) — roteiro resumido em [Roteiro do Vídeo de Demonstração](#roteiro-do-vídeo-de-demonstração) e detalhado (tempos e troubleshooting) em [`ROTEIRO-PROVA-REAL.md`](ROTEIRO-PROVA-REAL.md).
 
 2. **Documentação Separada por Tópicos:**
 
+- [Cobertura dos Requisitos do Desafio](#cobertura-dos-requisitos-do-desafio);
 - [O Problema: Falha Silenciosa](#o-problema-falha-silenciosa);
 - [Pré-requisito: Base das Fases 1, 2 e 3](#pré-requisito-base-das-fases-1-2-e-3);
-- [Como a stack entra no cluster (GitOps)](#como-a-stack-entra-no-cluster-gitops);
+- [Como a Stack Entra no Cluster (GitOps)](#como-a-stack-entra-no-cluster-gitops);
 - [Monitoramento Open Source (Prometheus, Loki e Grafana)](#monitoramento-open-source-prometheus-loki-e-grafana);
-- [OpenTelemetry Collector & Padronização](#opentelemetry-collector--padronização);
-- [Instrumentação e APM](#instrumentação-e-apm);
+- [OpenTelemetry Collector e Padronização](#opentelemetry-collector-e-padronização);
+- [Instrumentação e APM (Datadog)](#instrumentação-e-apm-datadog);
 - [Alertas Inteligentes, Incidentes e ChatOps](#alertas-inteligentes-incidentes-e-chatops);
 - [Self-Healing](#self-healing);
-- [Chaves externas: onde e como configurar](#chaves-externas-onde-e-como-configurar);
-- [A Prova Real: Roteiro do Incidente](#a-prova-real-roteiro-do-incidente);
+- [Chaves Externas: Onde e Como Configurar](#chaves-externas-onde-e-como-configurar);
+- [Roteiro do Vídeo de Demonstração](#roteiro-do-vídeo-de-demonstração);
 - [Justificativa Técnica](#justificativa-técnica);
 - [Evidências Visuais](#evidências-visuais);
 - [Dificuldades Encontradas](#dificuldades-encontradas);
@@ -37,17 +38,18 @@ Instrumentamos os 5 microsserviços do ToggleMaster (`auth`, `flags`, `targeting
 
 3. **Código Fonte no Repositório:**
 
-| O quê | Onde |
-|---|---|
-| Stack de observabilidade (GitOps) | [`fase-4/gitops/`](gitops/) — `applicationset.yaml`, `components.yaml`, `values/`, `manifests/observability/` |
-| Variáveis OTel comuns aos 5 serviços | [`fase-3/components/otel/`](../fase-3/components/otel/) (Kustomize Component) |
-| Instrumentação Python | `fase-2/{flags,targeting,analytics}-service/telemetry.py` + `gunicorn.conf.py` |
-| Instrumentação Go | `fase-2/{auth,evaluation}-service/telemetry.go` (+ `sqs.go` no evaluation) |
-| Alertas, contact points e policy | [`fase-4/gitops/manifests/observability/alerting.yaml`](gitops/manifests/observability/alerting.yaml) |
-| Self-Healing | [`.github/workflows/self-healing.yml`](../.github/workflows/self-healing.yml) + runbook [`runbooks/5xx-alto.md`](runbooks/5xx-alto.md) |
-| Injeção de falha (prova real) | `fase-2/auth-service/chaos.go` + [`scripts/`](scripts/) |
+| Entregável pedido | O quê | Onde |
+|---|---|---|
+| Código IaC/GitOps com a stack de monitoramento e o OTel Collector | ApplicationSet, lista de componentes, values dos charts, dashboard e alerting como código | [`fase-4/gitops/`](gitops/) — `applicationset.yaml`, `components.yaml`, `values/`, `manifests/observability/` |
+| | Terraform: node group com 3 nós e aplicação do ApplicationSet da observabilidade | [`fase-3/infra/terraform/envs/lab/main.tf`](../fase-3/infra/terraform/envs/lab/main.tf) (`node_desired`, `gitops_root_app_paths`) |
+| Código fonte das aplicações com a instrumentação | Variáveis `OTEL_*` comuns aos 5 serviços (Kustomize Component) | [`fase-3/components/otel/`](../fase-3/components/otel/) |
+| | Instrumentação Python (Flask, psycopg2, requests, botocore, logging) | `fase-2/{flags,targeting,analytics}-service/telemetry.py` + `gunicorn.conf.py` |
+| | Instrumentação Go (`otelhttp`, `otelsql`, `redisotel`, propagação no SQS) | `fase-2/{auth,evaluation}-service/telemetry.go` (+ `sqs.go` no evaluation) |
+| Scripts e automações do Self-Healing | Regra de alerta, contact points (PagerDuty, Slack, GitHub) e policy | [`fase-4/gitops/manifests/observability/alerting.yaml`](gitops/manifests/observability/alerting.yaml) |
+| | Workflow de Self-Healing e runbook | [`.github/workflows/self-healing.yml`](../.github/workflows/self-healing.yml) + [`runbooks/5xx-alto.md`](runbooks/5xx-alto.md) |
+| | Injeção de falha e geração de tráfego para a prova real | `fase-2/auth-service/chaos.go` + [`scripts/`](scripts/) |
 
-4. **Relatório de Entrega (.PDF):** 🚧 nomes, RMs, usernames, links do repositório e do vídeo, evidências visuais e justificativa técnica.
+4. **Relatório de Entrega (.PDF):** 🚧 nomes, RMs e usernames; links do repositório e do vídeo; [Evidências Visuais](#evidências-visuais); [Justificativa Técnica](#justificativa-técnica).
 
 5. **Integrantes do Grupo**:
 
@@ -55,6 +57,26 @@ Instrumentamos os 5 microsserviços do ToggleMaster (`auth`, `flags`, `targeting
 - [Thiago de Melo Macedo](https://www.linkedin.com/in/thiago-melo-macedo)
 
 > **Importante — Ambiente de Nuvem (AWS Academy):** assim como nas fases anteriores, trabalhamos sob as restrições do AWS Academy: **não é possível criar Roles ou Policies de IAM** e **não há IRSA**. Isso impacta diretamente a escolha da automação de Self-Healing (ver [Self-Healing](#self-healing)) e o envio de dados para serviços externos (Datadog, PagerDuty, Slack), cujas chaves são entregues aos pods pelo **External Secrets Operator** a partir do AWS Secrets Manager — nunca versionadas no Git.
+
+## Cobertura dos Requisitos do Desafio
+
+Resumo de cada requisito técnico do enunciado, como foi atendido e onde está a evidência. Os detalhes estão nas seções seguintes.
+
+| Requisito | Como atendemos | Seção / código |
+|---|---|---|
+| **Base das Fases 1, 2 e 3 funcionando** | 5 microsserviços conteinerizados, Terraform, CI/CD com DevSecOps e EKS via GitOps continuam em operação; a observabilidade entra **em cima** deles | [Pré-requisito](#pré-requisito-base-das-fases-1-2-e-3) |
+| **1. Prometheus** | `kube-prometheus-stack` via Helm/ArgoCD; métricas de infraestrutura (`kube-state-metrics`, `node-exporter`) e de aplicação (OTLP nativo) | [Monitoramento](#monitoramento-open-source-prometheus-loki-e-grafana) · `gitops/values/kube-prometheus-stack.yaml` |
+| **1. Loki** | chart `loki` (SingleBinary); logs de **todos** os containers do cluster, coletados pelo OTel Collector | [Monitoramento](#monitoramento-open-source-prometheus-loki-e-grafana) · `gitops/values/loki.yaml` |
+| **1. Grafana + 1 dashboard customizado** (recursos do cluster, taxa de requisições, logs em tempo real) | dashboard "Saúde do Ecossistema ToggleMaster" com os 3 painéis exigidos e mais 5xx, latência p95, réplicas e restarts | [Dashboard](#dashboard-customizado-saúde-do-ecossistema-togglemaster) · `manifests/observability/dashboards/togglemaster-saude.json` |
+| **2. OTel Collector (obrigatório)** como peça central | DaemonSet `contrib`; os serviços só falam OTLP com o Collector, que roteia métricas → Prometheus, logs → Loki, traces → Datadog | [OTel Collector](#opentelemetry-collector-e-padronização) · `gitops/values/otel-collector.yaml` |
+| **3. Ferramenta APM** (Datadog ou New Relic) | **Datadog**, alimentado pelo exporter do Collector, sem Datadog Agent | [APM](#ferramenta-apm-e-service-map-datadog) · [Justificativa](#datadog-vs-new-relic) |
+| **3. Instrumentação do código** | bibliotecas OpenTelemetry nos 5 serviços (Go e Python), sem alterar lógica de negócio | [Instrumentação](#instrumentação-do-código) · `telemetry.go` / `telemetry.py` |
+| **3. Distributed Tracing** (requisição ao `evaluation-service`) | um único trace: `evaluation` → `auth`/`flags`/`targeting` → Redis → SQS → `analytics` (contexto W3C propagado, inclusive pela fila) | [Distributed Tracing](#distributed-tracing) |
+| **3. Service Map** com os 5 microsserviços | `datadog/connector` calcula as estatísticas de APM; o Service Map mostra os 5 serviços e suas dependências | [APM](#ferramenta-apm-e-service-map-datadog) |
+| **4. Criação do alerta** (ex.: 5xx > 5%) | regra no Grafana: **5xx > 5% por serviço, sustentado por 2 min** | [O alerta](#o-alerta) · `manifests/observability/alerting.yaml` |
+| **4. Gerenciamento de incidentes** (PagerDuty ou OpsGenie) | **PagerDuty** (Events API v2): incidente abre no *Firing* e fecha no *Resolved* | [PagerDuty](#gerenciamento-de-incidentes-pagerduty) · [Justificativa](#opsgenie-vs-pagerduty) |
+| **4. Notificação ChatOps** (Slack, Discord ou Teams) | **Slack** (Incoming Webhook) com serviço, % de 5xx, runbook e dashboard; a Action fecha o ciclo no mesmo canal | [Slack](#notificação-chatops-slack) |
+| **4. Self-Healing (obrigatório)** | **GitHub Action** disparada por webhook do alerta: `kubectl rollout restart deployment/<svc>-deployment`, com allowlist, cooldown e aviso no Slack | [Self-Healing](#self-healing) · `.github/workflows/self-healing.yml` |
 
 ## O Problema: Falha Silenciosa
 
@@ -64,8 +86,6 @@ No último final de semana, o `evaluation-service` começou a falhar **silencios
 - **O autoscaling piorou a situação:** como o HPA escala por consumo de recursos, ele interpretou as falhas como "mais carga" e subiu réplicas, aumentando o custo sem resolver nada.
 - **Investigação às cegas:** foram mais **4 horas** para achar a causa raiz, porque os logs estavam espalhados pelos pods (e somem quando o pod é recriado).
 - **Nenhuma reação automática:** toda mitigação dependia de alguém acordar, entrar no cluster e agir manualmente.
-
-> **Analogia:** é como ter um carro moderníssimo, que se monta sozinho em minutos (Terraform) e troca de peça sozinho na estrada (GitOps), mas **sem painel**: sem velocímetro, sem luz de óleo, sem alarme. O carro só para quando o motor já fundiu — e quem avisa é o passageiro.
 
 O que construímos para cada ponto:
 
@@ -87,7 +107,7 @@ A Fase 4 é construída **em cima** da arquitetura automatizada das fases anteri
 | CI/CD com DevSecOps | `.github/workflows/ci-<svc>.yml` + `_reusable-ci-service.yml` |
 | Kubernetes (EKS) gerenciado via GitOps | [`fase-3/gitops/`](../fase-3/gitops/) (ArgoCD + ApplicationSet) |
 
-## Como a stack entra no cluster (GitOps)
+## Como a Stack Entra no Cluster (GitOps)
 
 Nada da observabilidade é instalado à mão. Um **segundo ApplicationSet**, `observability` ([`gitops/applicationset.yaml`](gitops/applicationset.yaml)), lê a lista [`gitops/components.yaml`](gitops/components.yaml) e gera uma `Application` por item:
 
@@ -101,13 +121,13 @@ Nada da observabilidade é instalado à mão. Um **segundo ApplicationSet**, `ob
 - **Helm multi-source:** o chart vem do repositório oficial e os `values` vêm deste Git (`$values/fase-4/gitops/values/<nome>.yaml`). Trocar a versão de um componente é mudar **uma linha** no `components.yaml`.
 - **O ApplicationSet da Fase 3 não foi tocado:** mudar o nome de uma Application gerada cria um órfão, e o prune derruba o pod. A observabilidade ganhou o seu próprio ApplicationSet.
 - **Terraform:** o `null_resource` que aplica o ApplicationSet raiz passou a aplicar uma **lista** (`gitops_root_app_paths`), e não um arquivo por componente.
-- **Capacidade:** o node group do lab subiu de 2 para **3 × `t3.medium`** para caber a stack sem despejar os serviços.
+- **Capacidade:** o node group do lab subiu de 2 para **3 × `t3.medium`** (`node_desired = 3`) para caber a stack sem despejar os serviços.
 
 > **Exemplo:** para adicionar um novo componente (ex.: Tempo), basta acrescentar um item ao `components.yaml` e um arquivo em `values/`. O ArgoCD cria a `Application` sozinho.
 
 ## Monitoramento Open Source (Prometheus, Loki e Grafana)
 
-- **Prometheus** (v3): métricas de infraestrutura (`kube-state-metrics`, `node-exporter`) e métricas de aplicação, recebidas **via OTLP nativo** (`--web.enable-otlp-receiver`), sem exporter intermediário. Retenção de 2 dias em `emptyDir`, porque o lab é recriado a cada sessão.
+- **Prometheus** (v3): métricas de infraestrutura (`kube-state-metrics`, `node-exporter`) e métricas de aplicação, recebidas **via OTLP nativo** (`enableOTLPReceiver: true`), sem exporter intermediário. Retenção de 2 dias em `emptyDir`, porque o lab é recriado a cada sessão.
 - **Loki** (v3, SingleBinary): logs de **todos** os containers, recebidos via **OTLP nativo** (`/otlp`). Retenção de 48 h. Os logs deixam de "morrer junto com o pod".
 - **Grafana** (v13): datasources Prometheus e Loki provisionados por código. A senha de admin é gerada **dentro do cluster** pelo ESO (gerador `Password`), uma única vez. O acesso é só por `port-forward`, sem nada exposto na internet. O Alertmanager do chart fica **desligado**, porque os alertas vivem no Grafana.
 
@@ -118,24 +138,22 @@ kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80 
 
 ### Dashboard customizado: "Saúde do Ecossistema ToggleMaster"
 
-JSON versionado em [`manifests/observability/dashboards/`](gitops/manifests/observability/dashboards/), entregue como ConfigMap (label `grafana_dashboard: "1"`) e carregado pelo sidecar do Grafana (uid `togglemaster-saude`):
+JSON versionado em [`manifests/observability/dashboards/`](gitops/manifests/observability/dashboards/), entregue como ConfigMap (label `grafana_dashboard: "1"`) e carregado pelo sidecar do Grafana (uid `togglemaster-saude`). Os três painéis exigidos pelo desafio estão marcados com ✅:
 
 | Painel | Fonte | O que responde |
 |---|---|---|
-| CPU/memória do cluster e por serviço | Prometheus | "O cluster está no limite?" |
-| Requisições por segundo por serviço | Prometheus (métricas OTel) | "Quem está recebendo tráfego?" |
+| ✅ CPU/memória do cluster e por serviço | Prometheus | "O cluster está no limite?" |
+| ✅ Requisições por segundo por serviço | Prometheus (métricas OTel) | "Quem está recebendo tráfego?" |
+| ✅ Logs em tempo real (todos e só erros) | Loki | "O que os serviços estão dizendo agora?" |
 | % de erros HTTP 5xx por serviço | Prometheus (métricas OTel) | "Quem está falhando?" |
 | Latência p95 por serviço | Prometheus (métricas OTel) | "Quem está lento?" |
 | Réplicas e restarts | Prometheus | "O HPA/KEDA está escalando? Tem pod reiniciando?" |
-| Logs ao vivo | Loki | "O que os serviços estão dizendo agora?" |
 
 > **Exemplo:** se o `evaluation-service` repetir a falha do fim de semana, o painel de **5xx** sobe, o de **réplicas** mostra o HPA escalando e, logo abaixo, o painel de **logs** mostra a mensagem de erro, tudo na mesma tela, em segundos e não em 10 horas.
 
-## OpenTelemetry Collector & Padronização
+## OpenTelemetry Collector e Padronização
 
-O **OpenTelemetry Collector** é a peça central: os microsserviços **não falam diretamente** com Prometheus, Loki ou Datadog. Eles mandam tudo via **OTLP** para o Collector, que processa e roteia.
-
-> **Analogia:** o Collector é uma **central dos Correios**. Cada serviço só precisa saber o endereço da central e deixar a carta (telemetria) lá. A central separa as cartas e entrega cada uma no destino certo: métricas no Prometheus, logs no Loki, traces no Datadog. Se amanhã trocarmos o APM, só a central muda e nenhum serviço é recompilado.
+O **OpenTelemetry Collector** é a peça central: os microsserviços **não falam diretamente** com Prometheus, Loki ou Datadog. Eles mandam tudo via **OTLP** para o Collector, que processa e roteia cada sinal para o backend certo. Se amanhã trocarmos o APM, só o Collector muda e nenhum serviço é recompilado.
 
 **Modo DaemonSet (1 Collector por nó):** cada serviço manda para o Collector **do próprio nó**, pelo endereço `http://$(HOST_IP):4318`, com `hostPort` e IP do nó via `status.hostIP`. O mesmo pod lê os logs de todos os containers do nó em `/var/log/pods`, substituindo o Promtail, que foi descontinuado.
 
@@ -166,7 +184,7 @@ O **OpenTelemetry Collector** é a peça central: os microsserviços **não fala
 
 > *Nota:* o desafio permite usar o **Grafana Alloy** no lugar do OTel Collector. Ficamos com o **OTel Collector `contrib`**: é o padrão neutro da CNCF, tem exporter e connector oficiais do Datadog e não amarra a arquitetura ao ecossistema Grafana.
 
-## Instrumentação e APM
+## Instrumentação e APM (Datadog)
 
 ### Instrumentação do código
 
@@ -181,7 +199,7 @@ O **OpenTelemetry Collector** é a peça central: os microsserviços **não fala
 - **Go** (`telemetry.go`, idêntico nos 2 serviços): SDK com exporters OTLP/HTTP de traces e métricas, propagador W3C e **desligamento gracioso** (`signal.NotifyContext`), que esvazia os buffers quando o Kubernetes manda `SIGTERM`.
 - **Python** (`telemetry.py`, idêntico nos 3 serviços): o SDK é ligado no hook **`post_fork` do gunicorn**, uma vez por worker, e **não** pelo `opentelemetry-instrument`. As threads de exportação não sobrevivem ao `fork`, e cada worker precisa do próprio `service.instance.id`; sem isso, o Prometheus via o contador "voltar" e as taxas saíam erradas. Quem decide o que é instrumentado é o `requirements.txt` de cada serviço.
 - **Logs com `trace_id`:** o `LoggingInstrumentor` (Python) coloca `trace_id`/`span_id` em cada linha. No Loki, dá para pular do log para o trace.
-- **`/health` fora da instrumentação** nos 5 serviços: as probes rodam a cada poucos segundos e sempre respondem 200, o que diluiria a taxa de erro do alerta.
+- **`/health` fora da instrumentação** nos 5 serviços (`otelhttp.WithFilter` no Go, `OTEL_PYTHON_EXCLUDED_URLS` no Python): as probes rodam a cada poucos segundos e sempre respondem 200, o que diluiria a taxa de erro do alerta.
 
 ### Distributed Tracing
 
@@ -191,7 +209,7 @@ O contexto W3C (`traceparent`) é propagado em todas as chamadas HTTP pelos inst
 
 ### Ferramenta APM e Service Map: Datadog
 
-Os traces saem do Collector pelo exporter `datadog`, **sem instalar o Datadog Agent**. O `datadog/connector` calcula as estatísticas de APM e alimenta a **Service Page** e o **Service Map**, com os 5 serviços e suas dependências (PostgreSQL, Redis, SQS). O ambiente aparece como `env:lab`.
+Os traces saem do Collector pelo exporter `datadog`, **sem instalar o Datadog Agent**. O `datadog/connector` calcula as estatísticas de APM e alimenta a **Service Page** e o **Service Map**, com os 5 serviços e suas dependências (PostgreSQL, Redis, SQS). O ambiente aparece como `env:lab`. A comparação com o New Relic está em [Justificativa Técnica](#datadog-vs-new-relic).
 
 ## Alertas Inteligentes, Incidentes e ChatOps
 
@@ -213,11 +231,9 @@ A query usa a métrica OTel `http_server_request_duration_seconds_count` e extra
 - **Agrupamento por `alertname` + `service`:** 1 incidente por serviço afetado, e não 1 por pod. O `repeat_interval` de 4 h evita repetir a mesma notificação.
 - **Sem dados = OK:** serviço sem 5xx não gera série, e isso não é tratado como problema.
 
-> **Analogia:** um alarme de incêndio que toca a cada torrada queimada faz todo mundo parar de prestar atenção nele. Por isso o alarme só toca quando há fumaça de verdade por um tempo, e aí ele **sempre** merece atenção.
-
 ### Gerenciamento de incidentes: PagerDuty
 
-O contact point `togglemaster-incidente` tem o receiver **PagerDuty** (Events API v2). O incidente **abre** quando o alerta entra em *Firing* e **fecha sozinho** quando ele volta a *Normal* (*Resolved*), com o serviço como `component`.
+O contact point `togglemaster-incidente` tem o receiver **PagerDuty** (Events API v2). O incidente **abre** quando o alerta entra em *Firing* e **fecha sozinho** quando ele volta a *Normal* (*Resolved*), com o serviço como `component`. A comparação com o OpsGenie está em [Justificativa Técnica](#opsgenie-vs-pagerduty).
 
 ### Notificação (ChatOps): Slack
 
@@ -244,7 +260,7 @@ alerta Firing ──webhook──> GitHub API (workflow_dispatch, ref=lab, input
 - **Proteção contra loop:** `concurrency` por serviço (2 alertas seguidos não geram 2 restarts juntos) e **cooldown de 10 min**, lido do `kubectl.kubernetes.io/restartedAt` que o próprio `rollout restart` grava. Se o restart não curou, o problema não é de estado: o workflow não insiste e avisa no Slack que precisa de um humano, que já foi chamado pelo PagerDuty.
 - **Disparo manual** para testes: `gh workflow run self-healing.yml --ref lab -f service=auth`.
 
-## Chaves externas: onde e como configurar
+## Chaves Externas: Onde e Como Configurar
 
 As 5 chaves ficam em **um único secret** do **AWS Secrets Manager** (`us-east-1`), chamado **`tc-observability`**. O External Secrets Operator as entrega aos pods; nada vai para o Git.
 
@@ -268,7 +284,7 @@ unset DD_API_KEY DD_SITE PAGERDUTY_ROUTING_KEY SLACK_WEBHOOK_URL GITHUB_DISPATCH
 # para trocar valores depois: mesmo pipe com `aws secretsmanager put-secret-value --secret-id tc-observability`
 ```
 
-**Ordem segura:** crie o secret **antes** de sincronizar as fatias 7, 9 e 10. Se ele for criado depois, force a leitura e reinicie quem lê as chaves como variável de ambiente (elas só são lidas na subida do pod):
+**Ordem segura:** crie o secret **antes** de o ArgoCD sincronizar o OTel Collector (Datadog) e o alerting do Grafana (PagerDuty, Slack e GitHub). Se ele for criado depois, force a leitura e reinicie quem lê as chaves como variável de ambiente (elas só são lidas na subida do pod):
 
 ```bash
 kubectl -n observability annotate externalsecret datadog-keys grafana-alerting force-sync=$(date +%s) --overwrite
@@ -277,18 +293,19 @@ kubectl -n observability rollout restart deploy/kube-prometheus-stack-grafana da
 
 > Sem o secret, **nada cai**: o Collector continua entregando métricas e logs ao Prometheus/Loki (só o Datadog fica sem dados), e o Grafana sobe normalmente (só os contact points ficam sem chave).
 
-## A Prova Real: Roteiro do Incidente
+## Roteiro do Vídeo de Demonstração
 
-Roteiro completo, com tempos e troubleshooting, em [`ROTEIRO-PROVA-REAL.md`](ROTEIRO-PROVA-REAL.md). Resumo:
+Segue os quatro blocos pedidos no enunciado. O roteiro completo do bloco 4, com tempos e troubleshooting, está em [`ROTEIRO-PROVA-REAL.md`](ROTEIRO-PROVA-REAL.md).
 
-1. **Visão geral:** cluster EKS (Terraform) e ArgoCD com as 11 Applications `Synced/Healthy`: as 7 da Fase 3 e as 4 da observabilidade.
-2. **Métricas, logs e OTel:** dashboard no Grafana, busca no Loki por `trace_id` e o roteamento do Collector.
-3. **APM:** Service Map no Datadog e o trace distribuído de uma chamada ao `evaluation`.
-4. **Causar o problema:** `fase-4/scripts/prova-real.sh on` liga a injeção de falha no `auth-service` (estado **em memória**, que o restart realmente cura). O `/validate` passa a responder 500, enquanto o `/health` continua 200: é a falha silenciosa.
-5. **Alerta:** *Pending* → *Firing* em ~2 min.
-6. **Incidente e ChatOps:** incidente no PagerDuty e mensagem no Slack.
-7. **Self-Healing:** GitHub Action executando; no terminal, `kubectl get pods -w` mostra o pod sendo trocado.
-8. **Recuperação:** 5xx volta a 0, alerta *Resolved*, incidente fechado e mensagem "RESOLVIDO" no Slack.
+1. **Visão Geral:** cluster EKS criado pelo Terraform e ArgoCD com as **11 Applications** `Synced/Healthy`: as 7 da Fase 3 e as 4 da observabilidade.
+2. **Métricas, Logs e OTel:** dashboard "Saúde do Ecossistema ToggleMaster" no Grafana; busca de logs no Loki por `trace_id`; explicação de como o OTel Collector roteia métricas, logs e traces.
+3. **APM e Tracing:** Service Map no Datadog com os 5 serviços; requisição de teste ao `evaluation-service` e o trace distribuído detalhado.
+4. **Incidente e Self-Healing (A Prova Real):**
+   - **Causar o problema:** `fase-4/scripts/prova-real.sh on` liga a injeção de falha no `auth-service` (estado **em memória**, que o restart realmente cura). O `/validate` passa a responder 500, enquanto o `/health` continua 200: é a falha silenciosa. `fase-4/scripts/gerar-trafego.sh` mantém tráfego contínuo.
+   - **Alerta disparando:** *Pending* → *Firing* no Grafana em ~2 min.
+   - **Incidente e ChatOps:** incidente aberto no PagerDuty e mensagem "ALERTA: auth-service" no Slack.
+   - **Self-Healing acionado:** execução do workflow `self-healing` no GitHub Actions; no terminal, `kubectl get pods -w` mostra o pod sendo trocado.
+   - **Recuperação:** 5xx volta a 0, alerta *Resolved*, incidente fechado no PagerDuty e mensagem "RESOLVIDO" no Slack.
 
 ## Justificativa Técnica
 
@@ -324,12 +341,14 @@ Roteiro completo, com tempos e troubleshooting, em [`ROTEIRO-PROVA-REAL.md`](ROT
 
 ## Evidências Visuais
 
-🚧 _Prints a adicionar após a gravação (salvar em `/.github/`):_
+🚧 _Prints obrigatórios do relatório, a adicionar após a gravação do vídeo (salvar em `/.github/` com os nomes abaixo):_
 
-- Print 1: dashboard "Saúde do Ecossistema ToggleMaster" no Grafana.
-- Print 2: trace distribuído no Datadog (evaluation → auth/flags/targeting → Redis → SQS → analytics) e Service Map.
-- Print 3: incidente no PagerDuty e notificação no Slack.
-- Print 4: execução do workflow `self-healing` (Step Summary) e o pod reiniciado.
+| # | Evidência exigida | O que capturar | Arquivo |
+|---|---|---|---|
+| 1 | Print do Dashboard do Grafana | dashboard "Saúde do Ecossistema ToggleMaster" com tráfego nos 5 serviços | `/.github/Fase4-DashboardGrafana.png` |
+| 2 | Print de um Trace distribuído no APM | trace de uma chamada ao `evaluation` (auth/flags/targeting → Redis → SQS → analytics) e o Service Map no Datadog | `/.github/Fase4-TraceDatadog.png` |
+| 3 | Print da notificação de incidente no ChatOps | mensagem "ALERTA: auth-service" no Slack e o incidente aberto no PagerDuty | `/.github/Fase4-IncidenteSlackPagerDuty.png` |
+| 4 | Print do log/execução da automação de Self-Healing | Step Summary do workflow `self-healing` e o pod do `auth` reiniciado (`kubectl get pods -w`) | `/.github/Fase4-SelfHealing.png` |
 
 ## Dificuldades Encontradas
 
@@ -361,7 +380,7 @@ Valores de referência da AWS em `us-east-1` (sob demanda, ~730 h/mês). No AWS 
 | PagerDuty / Slack | — | US$ 0 | planos gratuitos |
 | GitHub Actions (self-healing) | — | ≈ US$ 0 | ~1 min por execução, dentro da cota gratuita |
 
-O restante (EKS control plane, RDS, ElastiCache, SQS, DynamoDB, NAT/ELB) segue a estimativa da Fase 3. **Em produção**, o caminho para baixar custo seria: amostragem de traces no Collector (ex.: `tail_sampling` mantendo 100% dos erros e uma fração do sucesso) e Prometheus/Loki em volume persistente com retenção definida pelo time.
+O restante (EKS control plane, RDS, ElastiCache, SQS, DynamoDB, NAT/ELB) segue a [estimativa da Fase 3](../fase-3/README.md#estimativa-de-custos). **Em produção**, o caminho para baixar custo seria: amostragem de traces no Collector (ex.: `tail_sampling` mantendo 100% dos erros e uma fração do sucesso) e Prometheus/Loki em volume persistente com retenção definida pelo time.
 
 ## Diagrama de Arquitetura
 
