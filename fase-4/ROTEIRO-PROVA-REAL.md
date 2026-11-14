@@ -21,7 +21,7 @@ Os outros serviços não entram em cascata: o `flags` e o `targeting` transforma
 
 ## Pré-requisitos (antes de gravar)
 
-- [ ] PRs das fatias 7 a 11 mergeados e todas as Applications `Synced/Healthy` no ArgoCD.
+- [ ] Todas as PRs da Fase 4 mergeadas na `lab` e todas as 11 Applications `Synced/Healthy` no ArgoCD.
 - [ ] Secret `tc-observability` no AWS Secrets Manager com as 5 chaves (ver README da fase-4).
 - [ ] Os secrets AWS do GitHub (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) atualizados **nesta** sessão do AWS Academy. Senão a Action não consegue falar com o EKS.
 - [ ] Teste prévio do self-healing: `gh workflow run self-healing.yml --ref lab -f service=auth` termina verde.
@@ -66,7 +66,7 @@ Extra para o APM: no Datadog, filtre `service:auth-service status:error` e abra 
 
 | Sintoma | Onde olhar |
 |---|---|
-| `prova-real.sh` responde 404 | O pod ainda é anterior ao merge da fatia 11. Confira se `kubectl -n toggle exec deploy/auth-deployment -- env \| grep CHAOS` mostra `true`; o ConfigMap não reinicia o pod sozinho, então faça `kubectl -n toggle rollout restart deploy/auth-deployment`. |
+| `prova-real.sh` responde 404 | O pod ainda é anterior ao merge da injeção de falha (`chaos.go`). Confira se `kubectl -n toggle exec deploy/auth-deployment -- env \| grep CHAOS` mostra `true`; o ConfigMap não reinicia o pod sozinho, então faça `kubectl -n toggle rollout restart deploy/auth-deployment`. |
 | Alerta não sai de Normal | Precisa haver tráfego (> 0,1 req/s): o T3 está rodando? No Grafana → Explore, rode a query do alerta (está na regra). |
 | Firing, mas sem PagerDuty/Slack | O Grafana subiu antes do secret existir: `kubectl -n observability rollout restart deploy/kube-prometheus-stack-grafana`. |
 | Action não dispara | Grafana → Alerting → Contact points → `togglemaster-incidente` → erro do webhook. 401/403 = token sem a permissão *Actions: write*. |
