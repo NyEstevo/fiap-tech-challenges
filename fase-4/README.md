@@ -347,7 +347,6 @@ Prints capturados no ambiente `lab` durante a prova real (7 de novembro de 2026)
 | 2 | Print de um Trace distribuído no APM | [2.1](#21-trace-distribuído-no-datadog-apm) e [2.2](#22-service-map-no-datadog) |
 | 3 | Print da notificação de incidente no ChatOps | [3](#3-incidente-no-slack-e-no-pagerduty) |
 | 4 | Print do log/execução da automação de Self-Healing | [4](#4-execução-do-self-healing) |
-| — | Complemento: arquitetura da coleta de telemetria | [5](#5-diagrama-do-opentelemetry-collector) |
 
 ### 1.1 Dashboard do Grafana — visão geral e RED
 
@@ -385,8 +384,8 @@ Step Summary do workflow `self-healing.yml` no GitHub Actions (job `restart`, su
 
 ![Step Summary da execução do workflow self-healing](/.github/Fase4-SelfHealing.png)
 
-### 5. Diagrama do OpenTelemetry Collector
+## Diagrama de Arquitetura
 
-Complemento para a justificativa técnica: como a telemetria sai dos 5 serviços e chega às ferramentas. Cada serviço envia traces e métricas via OTLP/HTTP para o Collector do próprio nó (DaemonSet), e o Collector lê os logs em `/var/log/pods`. Dentro dele há quatro pipelines: **traces** → Datadog APM, **metrics/datadog** (estatísticas de APM calculadas pelo connector) → Datadog, **metrics** → Prometheus e **logs** → Loki. O Grafana consulta Prometheus e Loki. Nenhum serviço conhece o backend: trocar de ferramenta é trocar o exporter, sem mexer no código.
+Como a telemetria sai dos 5 microsserviços e chega às ferramentas. Cada serviço envia traces e métricas via OTLP/HTTP para o OTel Collector do próprio nó (DaemonSet), e o Collector lê os logs de todos os containers em `/var/log/pods`. Dentro dele há quatro pipelines: **traces** → Datadog APM; **metrics/datadog** (estatísticas de APM calculadas pelo connector) → Datadog; **metrics** → Prometheus; **logs** → Loki. O Grafana consulta Prometheus e Loki para o dashboard e para o alerta que aciona PagerDuty, Slack e o Self-Healing. Nenhum serviço conhece o backend: trocar de ferramenta é trocar o exporter, sem mexer no código.
 
-![Diagrama do pipeline do OpenTelemetry Collector](/.github/DiagramaOTELCollectorDark.png)
+![Diagrama de Arquitetura da Fase 4 — pipeline do OpenTelemetry Collector](/.github/DiagramaOTELCollectorDark.png)
