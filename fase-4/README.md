@@ -15,7 +15,7 @@ Instrumentamos os 5 microsserviços do ToggleMaster (`auth`, `flags`, `targeting
 
 ## Entregáveis da Fase 4
 
-1. **Vídeo de Demonstração (até 25 minutos):** 🚧 [Vídeo de Demonstração Tech Challenge Fase 4](#) — roteiro resumido em [Roteiro do Vídeo de Demonstração](#roteiro-do-vídeo-de-demonstração) e detalhado (tempos e troubleshooting) em [`ROTEIRO-PROVA-REAL.md`](ROTEIRO-PROVA-REAL.md).
+1. **Vídeo de Demonstração (até 25 minutos):** 🚧 [Vídeo de Demonstração Tech Challenge Fase 4](https://youtu.be/4PPi0DPkows) — roteiro resumido em [Roteiro do Vídeo de Demonstração](#roteiro-do-vídeo-de-demonstração) e detalhado (tempos e troubleshooting) em [`ROTEIRO-PROVA-REAL.md`](ROTEIRO-PROVA-REAL.md).
 
 2. **Documentação Separada por Tópicos:**
 
