@@ -32,8 +32,6 @@ Instrumentamos os 5 microsserviços do ToggleMaster (`auth`, `flags`, `targeting
 - [Roteiro do Vídeo de Demonstração](#roteiro-do-vídeo-de-demonstração);
 - [Justificativa Técnica](#justificativa-técnica);
 - [Evidências Visuais](#evidências-visuais);
-- [Dificuldades Encontradas](#dificuldades-encontradas);
-- [Estimativa de Custos](#estimativa-de-custos);
 - [Diagrama de Arquitetura](#diagrama-de-arquitetura);
 
 3. **Código Fonte no Repositório:**
@@ -349,38 +347,6 @@ Segue os quatro blocos pedidos no enunciado. O roteiro completo do bloco 4, com 
 | 2 | Print de um Trace distribuído no APM | trace de uma chamada ao `evaluation` (auth/flags/targeting → Redis → SQS → analytics) e o Service Map no Datadog | `/.github/Fase4-TraceDatadog.png` |
 | 3 | Print da notificação de incidente no ChatOps | mensagem "ALERTA: auth-service" no Slack e o incidente aberto no PagerDuty | `/.github/Fase4-IncidenteSlackPagerDuty.png` |
 | 4 | Print do log/execução da automação de Self-Healing | Step Summary do workflow `self-healing` e o pod do `auth` reiniciado (`kubectl get pods -w`) | `/.github/Fase4-SelfHealing.png` |
-
-## Dificuldades Encontradas
-
-| Dificuldade | Causa | Solução |
-|---|---|---|
-| Application `observability` em *Unknown* | o *git files generator* do ApplicationSet injeta uma chave `path` que **sobrescrevia** a nossa chave `path` | renomeada para `sourcePath`; o teste local passou a simular o `path` injetado |
-| Loki não subia | `readOnlyRootFilesystem` sem área de escrita em `/var/loki` | `emptyDir` montado em `/var/loki` |
-| Métricas Python com taxa "maluca" | SDK ligado antes do `fork` do gunicorn: threads mortas nos workers e workers exportando a mesma série | SDK ligado no `post_fork`, com `service.instance.id` por worker |
-| psycopg2 sem spans | `cursor_factory` passado por chamada anulava a instrumentação | `RealDictCursor` movido para o pool de conexões |
-| `analytics` em CrashLoop | o instrumentor do `requests` era ligado porque a **biblioteca** existia, mas o **pacote de instrumentação** não estava instalado | detecção pelo pacote de instrumentação, e não pela biblioteca alvo |
-| OTel Go v1.47 não compilava | exige Go 1.26; as imagens usam Go 1.25 | fixado em v1.46 |
-| Trace quebrava no SQS | `aws-sdk-go` v1 sem instrumentação oficial | `traceparent` injetado e extraído nos `MessageAttributes` (span PRODUCER/CONSUMER) |
-| Jobs de migração com imagem antiga após o merge | **corrida CI × ArgoCD**: o merge muda os manifests antes de o CI fazer o bump da tag, e o ArgoCD sincroniza no meio | *terminate* do sync + novo sync após o bump; documentado como ponto de atenção |
-| Self-healing nunca disparava (no papel) | `repository_dispatch` só roda workflows da branch padrão (`main`) | Grafana chama `workflow_dispatch` com `"ref": "lab"` |
-| `$` sumindo da configuração do Grafana | o Grafana expande `$VAR` nos arquivos de provisionamento, mas **não** no `model` da query | chaves como `${VAR}`; templates sem `$`; PromQL com `$1` (testado no Grafana 13.2.4 local) |
-| Uma chave faltando derrubaria a observabilidade | `secretKeyRef` obrigatório no Collector | chave opcional + valor padrão: sem chave, só o Datadog fica sem dados |
-| Cluster sem espaço para a stack | 2 × `t3.medium` já perto do limite de pods/memória | 3 nós, requests/limits enxutos, Alertmanager desligado, retenção curta |
-| Sessões do AWS Academy | credenciais expiram a cada sessão; ECR vazio ao recriar o ambiente | trocar os 3 secrets AWS do GitHub **juntos**; exportar as variáveis `AWS_*` antes do `terraform apply`; rebuild/push das imagens |
-
-## Estimativa de Custos
-
-Valores de referência da AWS em `us-east-1` (sob demanda, ~730 h/mês). No AWS Academy, o custo sai dos créditos do lab.
-
-| Item | Fase 3 | Fase 4 | Observação |
-|---|---|---|---|
-| Nós EKS (`t3.medium`, ~US$ 0,0416/h) | 2 × ≈ US$ 30 | 3 × ≈ US$ 30 | **+≈ US$ 30/mês**: o único custo AWS novo da observabilidade |
-| Armazenamento de métricas/logs | — | US$ 0 | `emptyDir` no disco dos nós (sem EBS); retenção de 2 d (Prometheus) e 48 h (Loki) |
-| Datadog APM | — | US$ 0 no Student Pack / trial | em conta paga, cobrado por host com APM, o maior custo da stack em produção |
-| PagerDuty / Slack | — | US$ 0 | planos gratuitos |
-| GitHub Actions (self-healing) | — | ≈ US$ 0 | ~1 min por execução, dentro da cota gratuita |
-
-O restante (EKS control plane, RDS, ElastiCache, SQS, DynamoDB, NAT/ELB) segue a [estimativa da Fase 3](../fase-3/README.md#estimativa-de-custos). **Em produção**, o caminho para baixar custo seria: amostragem de traces no Collector (ex.: `tail_sampling` mantendo 100% dos erros e uma fração do sucesso) e Prometheus/Loki em volume persistente com retenção definida pelo time.
 
 ## Diagrama de Arquitetura
 
